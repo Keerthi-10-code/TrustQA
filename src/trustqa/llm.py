@@ -230,12 +230,19 @@ def get_llm(config: Config | None = None) -> LLM:
 
 
 _default: LLM | None = None
+_overridden = False
 
 
 def set_llm(llm: LLM | None) -> None:
     """Override the module-level LLM (e.g. FakeLLM in tests). None resets it."""
-    global _default
+    global _default, _overridden
     _default = llm
+    _overridden = llm is not None
+
+
+def overridden_llm() -> LLM | None:
+    """The LLM installed with set_llm(), or None if none was installed."""
+    return _default if _overridden else None
 
 
 def complete(prompt: str, system: str | None = None, json: bool = False) -> str:

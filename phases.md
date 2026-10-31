@@ -45,15 +45,19 @@ Constraints: contracts are frozen after this phase, so keep them minimal and exp
 
 ## Phase 1 - Baseline end-to-end slice (1 week)
 Digital PDF -> chunks -> embeddings -> retrieval -> grounded answer with page source.
-- [ ] `processing/extract.py`: PyMuPDF page-by-page text; stable `document_id` registry (DOC01...); record filename + page.
-- [ ] `processing/chunking.py`: configurable size/overlap, sentence-aware splits, never cross page boundaries; unique `chunk_id` = `DOC01_P4_C1`.
-- [ ] `retrieval/index.py`: Sentence-Transformers embeddings (normalised) + FAISS inner-product index; metadata stored aligned; save/load index to `data/indexes/`.
-- [ ] `retrieval/search.py`: `retrieve(question, top_k)` returns original chunk records with scores.
-- [ ] `generation.py`: prompt that forces answer from supplied passages only, cites chunk IDs, abstains if insufficient; JSON output.
-- [ ] `pipeline.answer_question()` wiring it all; CLI script `python -m trustqa.cli "question"`.
-- [ ] Tests: chunk IDs unique, page numbers 1-indexed, retrieval returns known chunk for a known question.
+- [x] `processing/extract.py`: PyMuPDF page-by-page text; stable `document_id` registry (DOC01...); record filename + page.
+- [x] `processing/chunking.py`: configurable size/overlap, sentence-aware splits, never cross page boundaries; unique `chunk_id` = `DOC01_P4_C1`.
+- [x] `retrieval/index.py`: Sentence-Transformers embeddings (normalised) + FAISS inner-product index; metadata stored aligned; save/load index to `data/indexes/`.
+- [x] `retrieval/search.py`: `retrieve(question, top_k)` returns original chunk records with scores.
+- [x] `generation.py`: prompt that forces answer from supplied passages only, cites chunk IDs, abstains if insufficient; JSON output.
+- [x] `pipeline.answer_question()` wiring it all; CLI script `python -m trustqa.cli "question"`.
+- [x] Tests: chunk IDs unique, page numbers 1-indexed, retrieval returns known chunk for a known question.
 
 Exit check: ask 5 questions over pilot digital PDFs; answers cite correct pages. **Tag `v0.1-baseline`.** This is also baseline system A for evaluation - freeze its config.
+
+Phase 1 notes: frozen config for baseline system A is `eval/configs/system_A.json` (settings, code versions, Ollama model digest, document set with SHA-256 and DOC IDs) plus `requirements-lock.txt`. Status policy for A: cited answers are Partially Supported, never Verified (no support check until Phase 3); answers with no valid retrieved chunk ID are withheld as Insufficient Evidence. DOC IDs follow input order (CLI sorts by path, so adding PDFs renumbers them) - label eval questions by filename + page, not DOC ID. Run `pip install -e . --no-deps` once so `python -m trustqa.cli` works.
+
+Exit-check results (qwen2.5:3b, 4 pilot PDFs, 6 questions): every displayed page came from metadata and matched the cited chunk. Answers: 2/4 answerable correct (RAG retriever init from DPR, p5; BEIR "19 datasets", p20), 1 incomplete (Self-RAG reflection tokens, p17: listed only "Retrieve"), 1 wrong (RAG non-parametric memory: abstract p1 not retrieved), 1 abstention caused by a retrieval miss (BM25 robust baseline, p1 not retrieved); the unanswerable question correctly abstained. Both misses are retrieval failures - candidates for Phase 4 (BM25 + RRF).
 
 **Claude prompt - Phase 1**
 ```text

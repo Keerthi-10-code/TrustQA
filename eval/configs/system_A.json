@@ -1,0 +1,53 @@
+{
+  "system": "A-baseline",
+  "description": "Baseline A: digital-text RAG. PyMuPDF text only (no OCR, no tables), sentence chunks, MiniLM + FAISS IP, grounded JSON generation, citations resolved from metadata, no support/numeric verification.",
+  "frozen_at": "v0.1-baseline",
+  "settings": {
+    "llm_provider": "ollama",
+    "llm_model": "qwen2.5:3b",
+    "llm_temperature": 0.0,
+    "llm_effort": "low",
+    "llm_max_tokens": 2048,
+    "llm_timeout_s": 300,
+    "ollama_host": "http://localhost:11434",
+    "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+    "top_k": 5,
+    "chunk_size": 800,
+    "chunk_overlap": 150,
+    "extractor_version": "pymupdf-text-v1",
+    "chunker_version": "sentence-v1",
+    "index_format_version": 1,
+    "prompt_version": "grounded-v1"
+  },
+  "llm_seed": 0,
+  "ollama_model_digest": "357c53fb659c5076de1d65ccb0b397446227b71a42be9d1603d46168015c9e4b",
+  "status_policy": "abstain/no answer/no valid cited chunk -> Insufficient Evidence (answer withheld); otherwise Partially Supported; never Verified (no support check in A)",
+  "document_set": {
+    "index_key": "6e973297f9767324",
+    "ordering": "sorted by path under data/raw_pdfs",
+    "documents": [
+      {
+        "document_id": "DOC01",
+        "path": "scanned/transformer_vaswani2017_scanned.pdf",
+        "sha256": "6ec1f4e38dd7ffca070a98ddc321c20840ff1efeb434eb0cafe1e908bbec0090"
+      },
+      {
+        "document_id": "DOC02",
+        "path": "tables/beir_thakur2021.pdf",
+        "sha256": "1925755aeb627123d1a63c66f02e5aa2432f7e92751a02bea7c8c3b6bbb6ec33"
+      },
+      {
+        "document_id": "DOC03",
+        "path": "text/rag_lewis2020.pdf",
+        "sha256": "23e3249e9a1e75418d82efecab0ea8c4d033b89c93742f63208d47ce01f21233"
+      },
+      {
+        "document_id": "DOC04",
+        "path": "text/selfrag_asai2023.pdf",
+        "sha256": "d9eaa1398abac0df67a9d0933a5bf8b6d9d83d2e72da2a486073cd842dd52978"
+      }
+    ]
+  },
+  "python": "3.12.15",
+  "dependencies_lock": "requirements-lock.txt"
+}

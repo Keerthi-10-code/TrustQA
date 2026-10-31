@@ -11,3 +11,4 @@ data/indexes/*
 eval/results/*
 !eval/results/.gitkeep
 .pytest_cache/
+*.egg-info/

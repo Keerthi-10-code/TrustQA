@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from trustqa.retrieval.index import SearchIndex
+from trustqa.retrieval.index import SearchIndex, load_default_index
 from trustqa.schemas import RetrievedChunk
 
 
@@ -14,4 +14,11 @@ def retrieve(
     Each result carries the original, unmodified Chunk record and its similarity score.
     If `index` is None the default index under config.indexes_dir is loaded.
     """
-    raise NotImplementedError("Phase 1")
+    if not question or not question.strip():
+        raise ValueError("question must be non-empty")
+    if index is None:
+        index = load_default_index()
+    return [
+        RetrievedChunk(chunk=chunk, score=score, rank=rank)
+        for rank, (chunk, score) in enumerate(index.search(question.strip(), top_k), start=1)
+    ]
