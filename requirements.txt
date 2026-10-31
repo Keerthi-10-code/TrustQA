@@ -1,0 +1,17 @@
+pymupdf
+pdfplumber
+pytesseract
+pillow
+pandas
+numpy
+sentence-transformers
+faiss-cpu
+rank-bm25
+streamlit
+scikit-learn
+matplotlib
+python-dotenv
+groq
+pytest
+jiwer
+# optional, paid: anthropic
