@@ -49,7 +49,7 @@ OVERVIEW = ["accuracy", "verified_precision", "unsupported_answer_rate", "recall
 
 # reference palette (dataviz skill, light mode)
 SURFACE, INK, INK2, MUTED, GRID, AXIS = "#fcfcfb", "#0b0b0b", "#52514e", "#898781", "#e1e0d9", "#c3c2b7"
-SERIES = ["#2a78d6", "#eb6834", "#1baf7a"]  # first three slots: validated all-pairs
+SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100"]  # palette slots 1-4 (adjacent bars, value-labelled)
 BETTER, WORSE, NEUTRAL = "#2a78d6", "#e34948", "#f0efec"
 
 
@@ -293,7 +293,7 @@ def _plots(plots_dir: Path, summary: dict) -> None:
     if deltas:
         keys = [k for k in ["accuracy", "verified_rate", "verified_precision",
                             "unsupported_answer_rate", "numeric_value", "recall@5",
-                            "provenance_hit"]  # rates only: seconds would need their own axis
+                            "provenance_hit", "correct_abstention_rate"]  # rates only: seconds would need their own axis
                 if any(d.get(k) is not None for d in deltas.values())]
         # one x-scale for every panel, so bar lengths compare across ablations
         lim = max([abs(v) for d in deltas.values() for k, v in d.items()

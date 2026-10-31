@@ -42,11 +42,16 @@ SYSTEMS: dict[str, tuple[str, str, dict]] = {
     "C-no_support": ("C", "C without the support check", {**C_PINS, "verify_support": False}),
     "C-no_numeric": ("C", "C without numeric checks", {**C_PINS, "verify_numeric": False}),
     "C-no_ocr": ("C", "C without OCR fallback", {**C_PINS, "ocr_enabled": False}),
-    # candidate upgrade (measured before .env adopts it): section paths + lexical gate pass
-    "C+sections": ("C", "C with section headings and lexical gate pass",
-                   {**C_PINS, "section_headings": True, "gate_lexical_pass": True}),
+    # TrustQA as tagged v0.4-demo, before the Phase 6 fixes (kept for the before/after table)
+    "C-v0.4": ("C", "TrustQA v0.4 (before the Phase 6 fixes)",
+               {**C_PINS, "section_headings": False, "gate_lexical_pass": False,
+                "abstain_min_score": 0.30, "retrieval_entity_scope": False, "verify_scope": False,
+                "verify_answers_question": False, "support_number_fallback": False,
+                "judge_answers_question": False, "citation_repair": False,
+                "support_retry_missing": False,
+                "generation_prompt": "grounded-v1"}),
 }
-MAIN_SYSTEMS = ["A", "B", "C"]
+MAIN_SYSTEMS = ["A", "B", "C-v0.4", "C"]
 ABLATIONS = ["C-no_tables", "C-no_support", "C-no_numeric", "C-no_ocr"]
 
 

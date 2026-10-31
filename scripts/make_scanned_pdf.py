@@ -46,7 +46,7 @@ def scan_page(page: pymupdf.Page, dpi: int, skew: float, noise: float, rng: rand
     return buf.getvalue()
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("src", type=Path)
     ap.add_argument("out", type=Path)
@@ -56,7 +56,7 @@ def main() -> None:
     ap.add_argument("--noise", type=float, default=8.0, help="gaussian noise std (0-255)")
     ap.add_argument("--truth-dir", type=Path, help="write original page text here")
     ap.add_argument("--seed", type=int, default=0)
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
 
     rng = random.Random(args.seed)
     src = pymupdf.open(args.src)

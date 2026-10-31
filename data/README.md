@@ -15,6 +15,18 @@ so the collection can be rebuilt (NFR-04). Check each licence before redistribut
 The two RAG papers are related (multi-document questions). The scanned paper includes a
 results table (BLEU scores, page 8), so it also exercises tables on OCR pages.
 
+## Real-world check set (Phase 6, never used during development)
+
+Downloaded automatically by `python -m eval.realworld` into `data/realworld/` (git-ignored):
+
+| File | Source | Licence / notes |
+|---|---|---|
+| `realworld/dpr_karpukhin2020.pdf` | https://arxiv.org/abs/2004.04906 (v3; Karpukhin et al., 2020, Dense Passage Retrieval) | arXiv; check paper licence |
+| `realworld/colbert_khattab2020.pdf` | https://arxiv.org/abs/2004.12832 (v2; Khattab & Zaharia, 2020, ColBERT) | arXiv; check paper licence |
+| `realworld/scanned/dpr_scanned.pdf` | DPR pages 1-6 made image-only with `scripts/make_scanned_pdf.py` (ground truth in `realworld/scanned/truth/`) | derived locally |
+
+Questions and expected answers (with the page and passage they come from): `eval/realworld_questions.jsonl`.
+
 ## Synthetic scans and OCR ground truth
 
 `transformer_vaswani2017_scanned.pdf` is image-only (no text layer), produced by:

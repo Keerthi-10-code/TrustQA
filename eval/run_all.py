@@ -160,7 +160,8 @@ def run_system(system: str, repeat: int, questions: list[dict], docs: list[Path]
                 try:
                     retrieved = retrieve_with_config(q["question"], max(RETRIEVAL_DEPTH, config.top_k),
                                                      index, config, llm)
-                    result = answer_from_passages(q["question"], retrieved[:config.top_k], config)
+                    result = answer_from_passages(q["question"], retrieved[:config.top_k], config,
+                                                  index)
                     break
                 except LLMError as e:
                     if attempt == 2:
