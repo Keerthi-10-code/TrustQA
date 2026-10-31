@@ -41,8 +41,25 @@ class Config:
     chunk_size: int = 800
     chunk_overlap: int = 150
 
-    # OCR
+    # OCR (Phase 2). A page goes to OCR when its text layer has fewer than ocr_min_chars
+    # alphanumeric characters, or when more than ocr_max_nonalnum_ratio of its
+    # non-whitespace characters are non-alphanumeric / undecodable (garbage text layer).
     tesseract_cmd: str | None = None
+    ocr_enabled: bool = True
+    ocr_min_chars: int = 50
+    ocr_max_nonalnum_ratio: float = 0.6
+    ocr_dpi: int = 300
+    ocr_lang: str = "eng"
+    ocr_psm: int = 3  # Tesseract page segmentation mode (3 = automatic)
+    ocr_preprocess: bool = False  # grayscale + deskew + Otsu threshold before Tesseract
+
+    # Tables (Phase 2) and verification switches. flatten_tables=True skips table
+    # extraction: table content stays in the page text exactly as a plain-text RAG sees it.
+    flatten_tables: bool = False
+    verify: bool = True
+    # Preset for baseline system B (OCR + plain RAG): forces flatten_tables=True and
+    # verify=False regardless of their own settings.
+    baseline_b: bool = False
 
     # Paths
     raw_pdfs_dir: Path = PROJECT_ROOT / "data" / "raw_pdfs"
@@ -61,6 +78,23 @@ class Config:
             )
         if self.llm_effort not in {"low", "medium", "high", "xhigh", "max"}:
             raise ConfigError(f"unknown llm_effort {self.llm_effort!r}")
+        if self.ocr_min_chars < 0:
+            raise ConfigError(f"ocr_min_chars must be >= 0, got {self.ocr_min_chars}")
+        if not 0 < self.ocr_max_nonalnum_ratio <= 1:
+            raise ConfigError("ocr_max_nonalnum_ratio must be in (0, 1], got "
+                              f"{self.ocr_max_nonalnum_ratio}")
+        if not 72 <= self.ocr_dpi <= 1200:
+            raise ConfigError(f"ocr_dpi must be in [72, 1200], got {self.ocr_dpi}")
+        if self.baseline_b:  # frozen dataclass: resolve the preset in place
+            object.__setattr__(self, "flatten_tables", True)
+            object.__setattr__(self, "verify", False)
+
+    @property
+    def system_name(self) -> str:
+        """Which evaluation system this configuration reproduces (PRD / phases.md)."""
+        if self.flatten_tables and not self.verify:
+            return "B-ocr-plain-rag" if self.ocr_enabled else "A-baseline"
+        return "C-trustqa"
 
     def to_loggable_dict(self) -> dict[str, Any]:
         """All settings with secrets masked and paths as strings."""
@@ -88,6 +122,18 @@ def _env_float(name: str, default: float) -> float:
         return float(raw)
     except ValueError as e:
         raise ConfigError(f"{name} must be a number, got {raw!r}") from e
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == "":
+        return default
+    v = raw.strip().lower()
+    if v in {"1", "true", "yes", "on"}:
+        return True
+    if v in {"0", "false", "no", "off"}:
+        return False
+    raise ConfigError(f"{name} must be a boolean (1/0/true/false), got {raw!r}")
 
 
 def _env_str(name: str, default: str | None) -> str | None:
@@ -118,6 +164,16 @@ def load_config(env_file: str | Path | None = None, **overrides: Any) -> Config:
         chunk_size=_env_int("CHUNK_SIZE", d.chunk_size),
         chunk_overlap=_env_int("CHUNK_OVERLAP", d.chunk_overlap),
         tesseract_cmd=_env_str("TESSERACT_CMD", None),
+        ocr_enabled=_env_bool("OCR_ENABLED", d.ocr_enabled),
+        ocr_min_chars=_env_int("OCR_MIN_CHARS", d.ocr_min_chars),
+        ocr_max_nonalnum_ratio=_env_float("OCR_MAX_NONALNUM_RATIO", d.ocr_max_nonalnum_ratio),
+        ocr_dpi=_env_int("OCR_DPI", d.ocr_dpi),
+        ocr_lang=_env_str("OCR_LANG", d.ocr_lang),
+        ocr_psm=_env_int("OCR_PSM", d.ocr_psm),
+        ocr_preprocess=_env_bool("OCR_PREPROCESS", d.ocr_preprocess),
+        flatten_tables=_env_bool("FLATTEN_TABLES", d.flatten_tables),
+        verify=_env_bool("VERIFY", d.verify),
+        baseline_b=_env_bool("BASELINE_B", d.baseline_b),
     )
     values.update(overrides)
     return Config(**values)

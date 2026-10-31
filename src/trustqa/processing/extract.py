@@ -1,7 +1,9 @@
 """Page-by-page text extraction from digital PDFs (PyMuPDF) and the document-ID registry.
 
-Phase 1 handles the digital text layer only. Pages with no extractable text are returned
-with empty text (they become OCR candidates in Phase 2) and produce no chunks.
+`extract_pages` reads the digital text layer only (baseline system A). Pages with no
+extractable text come back empty; process.py decides per page whether to OCR them
+(processing/detect.py, processing/ocr.py) and removes extracted table regions from the
+page text (processing/tables.py).
 
 Text normalisation is deliberately conservative so numbers, signs and decimals are never
 altered (NFR-03): ligatures are expanded from an explicit map (no NFKC, which would turn
@@ -14,10 +16,16 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pymupdf
+
+from trustqa.schemas import ExtractionMethod
+
+if TYPE_CHECKING:
+    from trustqa.processing.ocr import OcrPage
 
 logger = logging.getLogger("trustqa")
 
@@ -75,12 +83,20 @@ def normalize_text(text: str, vocab: set[str] | None = None) -> str:
 
 @dataclass(frozen=True)
 class PageText:
-    """Text of one PDF page. page_number is 1-indexed."""
+    """Text of one PDF page. page_number is 1-indexed.
+
+    For OCR pages `ocr` keeps the per-word confidences and character spans so chunks can
+    report the confidence of exactly the words they contain.
+    """
 
     document_id: str
     document_name: str
     page_number: int
     text: str
+    extraction_method: ExtractionMethod = ExtractionMethod.PYMUPDF
+    ocr_used: bool = False
+    ocr_confidence: float | None = None  # page mean, 0-100
+    ocr: OcrPage | None = field(default=None, compare=False, repr=False)
 
 
 @dataclass(frozen=True)
@@ -134,12 +150,8 @@ class DocumentRegistry:
         return len(self._entries)
 
 
-def extract_pages(path: str | Path, document_id: str, document_name: str | None = None
-                  ) -> list[PageText]:
-    """Extract normalised text for every page of a PDF, in page order.
-
-    Raises ValueError if the file is missing, not a readable PDF, or encrypted (NFR-09).
-    """
+def open_pdf(path: str | Path, document_name: str | None = None) -> pymupdf.Document:
+    """Open a PDF for reading. Raises ValueError if missing, unreadable or encrypted (NFR-09)."""
     p = Path(path)
     name = document_name or p.name
     if not p.is_file():
@@ -148,22 +160,58 @@ def extract_pages(path: str | Path, document_id: str, document_name: str | None 
         doc = pymupdf.open(p)
     except Exception as e:  # PyMuPDF raises several types for corrupt input
         raise ValueError(f"{name}: not a readable PDF ({e})") from e
-    with doc:
-        if not doc.is_pdf:
-            raise ValueError(f"{name}: not a PDF file")
-        if doc.needs_pass:
-            raise ValueError(f"{name}: PDF is encrypted / password-protected")
-        raw_pages: list[str] = []
-        for i, page in enumerate(doc):
-            try:
-                raw_pages.append(page.get_text("text"))
-            except Exception as e:
-                raise ValueError(f"{name}: text extraction failed on page {i + 1} ({e})") from e
+    if not doc.is_pdf:
+        doc.close()
+        raise ValueError(f"{name}: not a PDF file")
+    if doc.needs_pass:
+        doc.close()
+        raise ValueError(f"{name}: PDF is encrypted / password-protected")
+    return doc
+
+
+def raw_page_text(page: pymupdf.Page, name: str, page_number: int) -> str:
+    try:
+        return page.get_text("text")
+    except Exception as e:
+        raise ValueError(f"{name}: text extraction failed on page {page_number} ({e})") from e
+
+
+def page_text_excluding(page: pymupdf.Page, rects: list[tuple[float, float, float, float]]
+                        ) -> str:
+    """Raw page text without the lines whose centre falls inside any of `rects`
+    (x0, top, x1, bottom in PDF points), e.g. extracted table bodies."""
+    if not rects:
+        return page.get_text("text")
+    blocks = []
+    for b in page.get_text("dict")["blocks"]:
+        if b.get("type") != 0:
+            continue
+        kept = []
+        for line in b["lines"]:
+            x0, y0, x1, y1 = line["bbox"]
+            cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+            if any(r[0] - 2 <= cx <= r[2] + 2 and r[1] - 2 <= cy <= r[3] + 2 for r in rects):
+                continue
+            kept.append("".join(span["text"] for span in line["spans"]))
+        if kept:
+            blocks.append("\n".join(kept))
+    return "\n".join(blocks)
+
+
+def extract_pages(path: str | Path, document_id: str, document_name: str | None = None
+                  ) -> list[PageText]:
+    """Extract normalised text for every page of a PDF, in page order (text layer only).
+
+    Raises ValueError if the file is missing, not a readable PDF, or encrypted (NFR-09).
+    """
+    name = document_name or Path(path).name
+    with open_pdf(path, name) as doc:
+        raw_pages = [raw_page_text(page, name, i + 1) for i, page in enumerate(doc)]
     vocab = document_vocabulary(raw_pages)
     pages = [PageText(document_id, name, i + 1, normalize_text(raw, vocab))
              for i, raw in enumerate(raw_pages)]
     empty = [pg.page_number for pg in pages if not pg.text]
     if empty:
-        logger.warning("%s: %d/%d page(s) have no text layer (OCR is Phase 2): %s",
+        logger.warning("%s: %d/%d page(s) have no text layer: %s",
                        name, len(empty), len(pages), empty)
     return pages

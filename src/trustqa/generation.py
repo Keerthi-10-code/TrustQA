@@ -22,7 +22,15 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from trustqa.llm import LLM, LLMError
-from trustqa.schemas import Chunk, Citation, RetrievedChunk, Warning, WarningCode
+from trustqa.schemas import (
+    Chunk,
+    Citation,
+    Result,
+    RetrievedChunk,
+    Status,
+    Warning,
+    WarningCode,
+)
 
 PROMPT_VERSION = "grounded-v1"
 
@@ -165,3 +173,25 @@ def generate(question: str, passages: Sequence[RetrievedChunk], llm: LLM) -> Gen
         return GenerationOutput(answer="", cited_ids=[], abstained=True)
     raw = llm.complete(build_prompt(question, passages), system=SYSTEM_PROMPT, json=True)
     return parse_generation(raw, passages)
+
+
+def answer_unverified(question: str, passages: Sequence[RetrievedChunk], llm: LLM) -> Result:
+    """Plain-RAG answer for baseline systems A/B (config.verify=False): generation plus
+    metadata-resolved citations, with no claim-support or numeric checks.
+
+    Frozen status policy (eval/configs/system_A.json): abstention, no answer, or no valid
+    cited chunk -> INSUFFICIENT_EVIDENCE with the answer withheld; otherwise
+    PARTIALLY_SUPPORTED, never VERIFIED. Kept separate from verification.generate_and_verify
+    so Phase 3 changes to verification never alter the baselines.
+    """
+    out = generate(question, passages, llm)
+    warnings = list(out.warnings)
+    if out.abstained or not out.answer or not out.cited_ids:
+        if out.answer and not out.abstained and not out.cited_ids:
+            warnings.append(Warning(
+                WarningCode.UNSUPPORTED_CLAIM,
+                "the model's answer cited no retrieved passage, so it was withheld"))
+        return Result(question=question, answer=ABSTENTION_ANSWER,
+                      status=Status.INSUFFICIENT_EVIDENCE, citations=[], warnings=warnings)
+    return Result(question=question, answer=out.answer, status=Status.PARTIALLY_SUPPORTED,
+                  citations=resolve_citations(out.cited_ids, passages), warnings=warnings)

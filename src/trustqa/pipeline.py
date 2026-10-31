@@ -10,9 +10,14 @@ from pathlib import Path
 
 from trustqa import llm as llm_mod
 from trustqa.config import Config, load_config, log_run_config
-from trustqa.generation import PROMPT_VERSION
-from trustqa.processing.extract import EXTRACTOR_VERSION, file_sha256
-from trustqa.processing.process import process_pdfs
+from trustqa.generation import PROMPT_VERSION, answer_unverified
+from trustqa.processing.extract import file_sha256
+from trustqa.processing.process import (
+    process_pdfs_detailed,
+    processed_key,
+    processing_signature,
+    write_processed,
+)
 from trustqa.retrieval.index import (
     INDEX_FORMAT_VERSION,
     SearchIndex,
@@ -26,7 +31,6 @@ from trustqa.verification.verify import generate_and_verify
 logger = logging.getLogger("trustqa")
 
 CHUNKER_VERSION = "sentence-v1"
-SYSTEM_NAME = "A-baseline"  # Phase 1: plain-text RAG, no OCR/tables/verification
 
 _memory_cache: dict[str, SearchIndex] = {}
 _llm_cache: dict[tuple, llm_mod.LLM] = {}
@@ -39,7 +43,8 @@ def index_key(doc_paths: Sequence[str | Path], config: Config) -> str:
         "chunk_size": config.chunk_size,
         "chunk_overlap": config.chunk_overlap,
         "embedding_model": config.embedding_model,
-        "extractor": EXTRACTOR_VERSION,
+        # == Phase 1 EXTRACTOR_VERSION when OCR and tables are off (baseline A key unchanged)
+        "extractor": processing_signature(config),
         "chunker": CHUNKER_VERSION,
         "index_format": INDEX_FORMAT_VERSION,
     }
@@ -51,7 +56,8 @@ def get_or_build_index(doc_paths: Sequence[str | Path], config: Config,
     """Return the index for this document set, from memory, disk or a fresh build.
 
     Built indexes are saved to config.indexes_dir/<key>/ and marked as the default index
-    used by retrieve(index=None).
+    used by retrieve(index=None). The canonical chunk records of a fresh build are also
+    written to config.processed_dir/<processed_key>/ (chunks.jsonl, documents.json, run_config.json).
     """
     paths = [Path(p) for p in doc_paths]
     if not paths:
@@ -74,10 +80,13 @@ def get_or_build_index(doc_paths: Sequence[str | Path], config: Config,
         except (OSError, ValueError) as e:
             logger.warning("cached index %s unusable (%s); rebuilding", key, e)
 
-    chunks = process_pdfs(paths, config)
+    result = process_pdfs_detailed(paths, config)
+    chunks = result.chunks
     if not chunks:
-        raise ValueError("no extractable text in the given documents (scanned/image-only "
-                         "PDFs need OCR, which arrives in Phase 2)")
+        hint = "" if config.ocr_enabled else " (OCR is disabled: set OCR_ENABLED=1)"
+        raise ValueError(f"no extractable text in the given documents{hint}")
+    write_processed(result, Path(config.processed_dir) / processed_key(result, config),
+                    run_record(config))
     idx = build_index(chunks, config)
     idx.save(target)
     manifest = [{"path": str(p), "name": p.name} for p in paths]
@@ -101,8 +110,8 @@ def _llm_for(config: Config) -> llm_mod.LLM:
 def run_record(config: Config) -> dict:
     """Everything needed to reproduce a run (NFR-04)."""
     return log_run_config(config, extra={
-        "system": SYSTEM_NAME,
-        "extractor_version": EXTRACTOR_VERSION,
+        "system": config.system_name,
+        "extractor_version": processing_signature(config),
         "chunker_version": CHUNKER_VERSION,
         "index_format_version": INDEX_FORMAT_VERSION,
         "prompt_version": PROMPT_VERSION,
@@ -116,6 +125,8 @@ def answer_question(
 
     Processed chunks and the index are cached per document set so repeated questions
     over the same uploads do not reprocess. Returns the final Result for the UI/CLI.
+    With config.verify=False (baselines A/B) the answer is generated and its citations
+    resolved, but no verification runs (generation.answer_unverified).
     """
     if not question or not question.strip():
         raise ValueError("question must be non-empty")
@@ -123,4 +134,6 @@ def answer_question(
     run_record(config)
     index = get_or_build_index(uploaded_docs, config)
     passages = retrieve(question, config.top_k, index)
+    if not config.verify:
+        return answer_unverified(question, passages, _llm_for(config))
     return generate_and_verify(question, passages, llm=_llm_for(config))

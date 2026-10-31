@@ -1,7 +1,9 @@
-"""Command line: python -m trustqa.cli "question" [--docs a.pdf b.pdf] [--json]
+"""Command line: python -m trustqa.cli "question" [--docs a.pdf b.pdf] [--json] [--baseline-b]
 
 With no --docs, every PDF under config.raw_pdfs_dir (recursively, sorted by path) is used.
 Document/page in the output come from chunk metadata, never from the LLM.
+--baseline-b reproduces baseline system B (OCR + plain RAG: tables flattened, no
+verification); the same as BASELINE_B=1 in .env.
 """
 
 from __future__ import annotations
@@ -51,6 +53,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--show-passages", action="store_true",
                     help="also print the retrieved passages and scores")
     ap.add_argument("--rebuild", action="store_true", help="ignore the cached index")
+    ap.add_argument("--baseline-b", action="store_true",
+                    help="baseline system B: OCR + plain RAG (tables flattened, no verification)")
     ap.add_argument("-v", "--verbose", action="store_true", help="log progress and run config")
     args = ap.parse_args(argv)
 
@@ -58,6 +62,8 @@ def main(argv: list[str] | None = None) -> int:
                         format="%(levelname)s %(message)s", stream=sys.stderr)
     try:
         overrides = {"top_k": args.top_k} if args.top_k is not None else {}
+        if args.baseline_b:
+            overrides["baseline_b"] = True
         config = load_config(**overrides)
         docs = args.docs or default_docs(config.raw_pdfs_dir)
         if not docs:

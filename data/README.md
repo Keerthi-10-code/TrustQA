@@ -33,5 +33,6 @@ scans are cleaner than real ones.
 ## Layout
 - `raw_pdfs/{text,scanned,tables}/` - input PDFs
 - `ocr_ground_truth/` - source PDFs and per-page reference text for synthetic scans
-- `processed/` - canonical chunk JSONL (Phase 2)
+- `processed/<key>/` - canonical chunk JSONL + per-document processing report (Phase 2);
+  `<key>` hashes the document contents, processing signature and chunk settings
 - `indexes/` - FAISS indexes (Phase 1)

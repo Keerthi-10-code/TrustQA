@@ -112,22 +112,36 @@ def chunk_text(text: str, chunk_size: int, chunk_overlap: int) -> list[str]:
 
 
 def chunk_page(page: PageText, chunk_size: int, chunk_overlap: int) -> list[Chunk]:
-    """Chunk one page. Empty pages produce no chunks."""
+    """Chunk one page. Empty pages produce no chunks.
+
+    Chunks inherit the page's extraction_method / ocr_used. For OCR pages each chunk's
+    ocr_confidence is the mean confidence of the OCR words inside that chunk (chunks are
+    substrings of the page text), falling back to the page mean.
+    """
     if not page.text:
         return []
-    return [
-        Chunk(
+    chunks = []
+    search_from = 0
+    for n, text in enumerate(chunk_text(page.text, chunk_size, chunk_overlap), start=1):
+        conf = page.ocr_confidence
+        if page.ocr is not None:
+            pos = page.text.find(text, search_from)
+            if pos >= 0:
+                span_conf = page.ocr.span_confidence(pos, pos + len(text))
+                conf = span_conf if span_conf is not None else conf
+                search_from = pos + 1
+        chunks.append(Chunk(
             document_id=page.document_id,
             document_name=page.document_name,
             page_number=page.page_number,
             chunk_id=chunk_id_for(page.document_id, page.page_number, n),
             text=text,
             content_type=ContentType.TEXT,
-            extraction_method=ExtractionMethod.PYMUPDF,
-            ocr_used=False,
-        )
-        for n, text in enumerate(chunk_text(page.text, chunk_size, chunk_overlap), start=1)
-    ]
+            extraction_method=ExtractionMethod(page.extraction_method),
+            ocr_used=page.ocr_used,
+            ocr_confidence=conf if page.ocr_used else None,
+        ))
+    return chunks
 
 
 def chunk_pages(pages: Iterable[PageText], chunk_size: int, chunk_overlap: int) -> list[Chunk]:

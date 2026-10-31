@@ -19,7 +19,8 @@ def cfg(tmp_path):
     env = tmp_path / ".env"
     env.write_text("")
     return load_config(env, chunk_size=200, chunk_overlap=40, top_k=3,
-                       indexes_dir=tmp_path / "idx", raw_pdfs_dir=tmp_path)
+                       indexes_dir=tmp_path / "idx", raw_pdfs_dir=tmp_path,
+                       processed_dir=tmp_path / "processed")
 
 
 @pytest.fixture(autouse=True)

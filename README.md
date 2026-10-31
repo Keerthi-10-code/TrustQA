@@ -33,3 +33,18 @@ python -m trustqa.cli "question" --docs a.pdf b.pdf --show-passages --json
 With no `--docs`, every PDF under `data/raw_pdfs/` is used. The first run builds and caches the
 index under `data/indexes/`. Document names and pages shown come from chunk metadata, never from the LLM.
 Baseline system A's frozen config: `eval/configs/system_A.json`.
+
+## Processing, OCR and tables (Phase 2)
+```
+python -m trustqa.processing                      # all PDFs under data/raw_pdfs -> data/processed/<key>/
+python -m trustqa.processing a.pdf --baseline-b   # system B: OCR on, tables flattened
+python scripts/inspect_page.py data/raw_pdfs/tables/beir_thakur2021.pdf 7   # page image beside text/tables
+python -m trustqa.cli "What nDCG@10 does BM25 achieve on TREC-COVID?" --baseline-b
+```
+`data/processed/<key>/` holds `chunks.jsonl` (one canonical chunk per line), `documents.json`
+(pages, OCR pages + confidence, tables, warnings per document) and `run_config.json`.
+Scanned/garbage pages are OCR'd with Tesseract (`OCR_*` settings); tables on digital pages become
+one chunk per row (`DOC02_P7_T1_R3`) whose text carries the caption, units and every
+`header=value` pair, with the structured row kept in `table_data`.
+Systems: A = `OCR_ENABLED=0 FLATTEN_TABLES=1 VERIFY=0` (`eval/configs/system_A.json`),
+B = `BASELINE_B=1` (`eval/configs/system_B.json`), C = defaults.

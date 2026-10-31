@@ -76,15 +76,31 @@ Keep the Phase 0 schemas unchanged; if you think a change is needed, stop and as
 ```
 
 ## Phase 2 - OCR and tables (1-1.5 weeks)
-- [ ] Scanned-page detection: text length / char-count threshold per page (also detect garbage text via non-alphanumeric ratio).
-- [ ] OCR fallback: render page via PyMuPDF at 300 DPI, run Tesseract with per-word confidence (`image_to_data`); store `extraction_method`, `ocr_used`, mean `ocr_confidence`. Light preprocessing (grayscale, deskew, threshold) behind a flag; compare on your scanned PDFs.
-- [ ] Table extraction with pdfplumber: `table_id`, headers, rows, cells, units, page. Handle merged/multi-line headers; Camelot only if pdfplumber fails on digital tables.
-- [ ] Table chunks: `content_type="table"`, `table_data` kept structured; `text` is a row-aware representation, e.g. `Table T2 (Revenue, Rs crore) | Year=2025 | Segment=Retail | Value=12`. Also emit header/caption context in every row chunk.
-- [ ] Canonical JSONL output to `data/processed/` (one record per chunk).
-- [ ] Inspection tool: small script that dumps a page's extracted text/table next to a page image for manual QA.
-- [ ] Tests: OCR triggered only on low-text pages; table headers/rows preserved; numbers, signs, decimals unaltered (NFR-03).
+- [x] Scanned-page detection: text length / char-count threshold per page (also detect garbage text via non-alphanumeric ratio).
+- [x] OCR fallback: render page via PyMuPDF at 300 DPI, run Tesseract with per-word confidence (`image_to_data`); store `extraction_method`, `ocr_used`, mean `ocr_confidence`. Light preprocessing (grayscale, deskew, threshold) behind a flag; compare on your scanned PDFs.
+- [x] Table extraction with pdfplumber: `table_id`, headers, rows, cells, units, page. Handle merged/multi-line headers; Camelot only if pdfplumber fails on digital tables.
+- [x] Table chunks: `content_type="table"`, `table_data` kept structured; `text` is a row-aware representation, e.g. `Table T2 (Revenue, Rs crore) | Year=2025 | Segment=Retail | Value=12`. Also emit header/caption context in every row chunk.
+- [x] Canonical JSONL output to `data/processed/` (one record per chunk).
+- [x] Inspection tool: small script that dumps a page's extracted text/table next to a page image for manual QA.
+- [x] Tests: OCR triggered only on low-text pages; table headers/rows preserved; numbers, signs, decimals unaltered (NFR-03).
 
 Exit check: scanned PDF questions retrieve the right page; table question returns correct value + unit + period. **Tag `v0.2-ocr-tables`.** This is baseline system B (OCR + plain RAG: same pipeline with tables flattened and no verification).
+
+Phase 2 notes: detection thresholds `OCR_MIN_CHARS=50`, `OCR_MAX_NONALNUM_RATIO=0.6` (digital pilot pages: >=290 alnum chars, ratio <=0.15 except the Self-RAG TOC page at 0.49; every synthetic-scan page has 0 chars). Undecodable glyphs (U+FFFD, `(cid:N)`, private use) count as garbage; blank pages are skipped; OCR text replaces the text layer only if it is better. OCR confidence is stored per chunk (mean of that chunk's words). Preprocessing (grayscale + deskew + Otsu) measured on the 9-page scan against ground truth: CER 5.39% / WER 10.2% without vs 5.55% / 11.0% with, so `OCR_PREPROCESS=0` (synthetic skew <=0.6 deg is already handled by Tesseract; re-test on real scans). Tables: caption-anchored rule-bounded grids built from pdfplumber words (booktabs papers), plus pdfplumber's lines strategy for fully ruled grids; Camelot not needed. 24 tables found across the 4 pilot digital sources incl. the Transformer source PDF, all captions correct. Super/subscripts are kept as `10^19` / `log_k`, never merged into digits. Baseline B frozen in `eval/configs/system_B.json` (`BASELINE_B=1`); A's index key is unchanged with OCR and tables off (tested).
+
+Exit-check results (qwen2.5:3b, top_k=5, 4 pilot PDFs; 5 scanned + 6 table questions; correct = right value in the answer and a citation to a page that states it):
+
+| | A (text only) | B (OCR, flat tables) | C (OCR + table chunks) |
+|---|---|---|---|
+| Scanned questions correct | 0/5 (no text for the scan) | 4/5 | 4/5 |
+| Table questions correct | 1/6 | 1/6 | 4/6 |
+| A page stating the value in top-5, table qs | 3/6 | 3/6 | 5/6 |
+
+A/B's one table hit (BM25 on TREC-COVID = 0.656) came from BEIR p9, whose flattened Hole@10 table repeats the value; on flattened table text they otherwise answered with wrong numbers from the right page ("20ms" for DPR CPU latency 230ms, "300" for NFCorpus' 323 test queries). Scanned results are identical for B and C (no tables are extracted from OCR pages).
+
+Failures: (1) scanned "Adam beta2" question: page 7 not retrieved, and OCR turned "β1 = 0.9, β2 = 0.98, ϵ = 10−9" into "3; = 0.9, 52 = 0.98 « = 10~°" with chunk confidence 92.5, so confidence alone does not flag symbol errors; (2) "TAS-B on FiQA-2018" (0.300): row chunk not in top-5 under dense retrieval (candidate for BM25, Phase 4), model abstained; (3) "BM25+CE vs BM25 on average": correct row retrieved at rank 1 (`...BM25+CE=+ 11%`) but the model answered 0.347 (generation error, a Phase 3 numeric-check case); (4) OCR'd tables are text only (scanned Table 2: "37.3" read as "373", "10^20" as "107°"); OCR table chunks have visibly lower confidence (80-88 vs 94-96 for prose). Table-extraction limits seen: row labels spanning several rows stay split per line (BEIR Table 1 "Bio-Medical / Information / Retrieval (IR)"); vertically centred cells become their own row (RAG Table 6 FEVER columns); tightly packed math columns merge (Transformer Table 3); merged body cells (\multicolumn) land in one of the spanned columns. Period check (supplement, since no pilot paper has periods): a synthetic annual-report page with a segment x FY2023-FY2025 table (Rs crore) added to the pilot set in a scratch run, 3 questions. Values correct 3/3 in B and 3/3 in C, incl. the sign of -1,250.40; C cites the exact row chunk, whose text and table_data carry the unit (`Rs crore`) and period (`FY2024=1,12,980.25`). qwen2.5:3b restated unit and period in its answer text only once (B, P2); answer wording is a generation concern (prompt frozen for A/B, claim checks in Phase 3).
+
+Phase 2 design decisions (kept deliberately): (1) a table row chunk's `table_data` holds only its own row, so a cited row is exactly the evidence Phase 3 checks; `tables.rebuild_table(chunks, table_id)` reassembles the full table for display; (2) super/subscripts in table cells are written `10^19` / `log_k` - Phase 3 numeric normalisation must read `^` as an exponent; (3) Tesseract missing -> digital pages kept with a warning in `documents.json`, error only if a document has no usable text; (4) baselines A/B answer via `generation.answer_unverified` (VERIFY=0), a frozen copy of the Phase 1 status policy, so Phase 3 changes to `verification/` cannot alter them.
 
 **Claude prompt - Phase 2**
 ```text
