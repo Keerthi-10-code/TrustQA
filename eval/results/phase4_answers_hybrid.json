@@ -1,0 +1,721 @@
+{
+ "created_at": "2026-10-31T16:14:12+00:00",
+ "questions_file": "eval/dev_questions.jsonl",
+ "variants": {
+  "hybrid": {
+   "flags": {
+    "retrieval_hybrid": true
+   },
+   "run_config": {
+    "llm_provider": "ollama",
+    "llm_model": "qwen2.5:3b",
+    "llm_temperature": 0.0,
+    "llm_effort": "low",
+    "llm_max_tokens": 2048,
+    "llm_timeout_s": 300,
+    "ollama_host": "http://localhost:11434",
+    "groq_api_key": "missing",
+    "anthropic_api_key": "missing",
+    "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+    "top_k": 5,
+    "retrieval_hybrid": true,
+    "rrf_k": 60,
+    "retrieval_candidates": 50,
+    "retrieval_diversify": "none",
+    "doc_quota": 2,
+    "mmr_lambda": 0.7,
+    "rerank": false,
+    "reranker_model": "cross-encoder/ms-marco-MiniLM-L-6-v2",
+    "retrieval_decompose": false,
+    "max_subqueries": 3,
+    "chunk_size": 800,
+    "chunk_overlap": 150,
+    "tesseract_cmd": "C:\\Program Files\\Tesseract-OCR\\tesseract.exe",
+    "ocr_enabled": true,
+    "ocr_min_chars": 50,
+    "ocr_max_nonalnum_ratio": 0.6,
+    "ocr_dpi": 300,
+    "ocr_lang": "eng",
+    "ocr_psm": 3,
+    "ocr_preprocess": false,
+    "flatten_tables": false,
+    "verify": true,
+    "baseline_b": false,
+    "verify_support": true,
+    "verify_numeric": true,
+    "verify_conflicts": true,
+    "abstain_min_score": 0.3,
+    "ocr_warn_confidence": 90.0,
+    "quote_min_similarity": 90.0,
+    "raw_pdfs_dir": "C:\\Users\\Bhyresh BS\\Documents\\dev\\TrustQA\\data\\raw_pdfs",
+    "processed_dir": "C:\\Users\\Bhyresh BS\\Documents\\dev\\TrustQA\\data\\processed",
+    "indexes_dir": "C:\\Users\\Bhyresh BS\\Documents\\dev\\TrustQA\\data\\indexes",
+    "results_dir": "C:\\Users\\Bhyresh BS\\Documents\\dev\\TrustQA\\eval\\results",
+    "system": "C-trustqa",
+    "extractor_version": "pymupdf-text-v1+tesseract-v1(min=50,ratio=0.6,dpi=300,lang=eng,psm=3,pre=0)+tables-v1",
+    "chunker_version": "sentence-v1",
+    "index_format_version": 1,
+    "prompt_version": "grounded-v1",
+    "verifier_version": "verify-v1+support-v1+calc-v1+conflict-v1"
+   },
+   "summary": {
+    "answerable": 36,
+    "answered": 25,
+    "verified": 20,
+    "cites_evidence": 21,
+    "numeric_ref_in_answer": "15/27",
+    "unanswerable_correctly_abstained": "2/2",
+    "latency_s_mean": 32.4
+   },
+   "per_question": [
+    {
+     "id": "D01",
+     "category": "direct",
+     "status": "Verified",
+     "answer": "RAG uses text documents as its non-parametric memory.",
+     "cited_pages": [
+      [
+       "rag_lewis2020.pdf",
+       2
+      ]
+     ],
+     "warnings": [],
+     "answered": true,
+     "cites_evidence": true,
+     "ref_in_answer": null,
+     "latency_s": 49.8
+    },
+    {
+     "id": "D02",
+     "category": "direct",
+     "status": "Verified",
+     "answer": "RAG’s retriever is initialized using DPR’s retriever, which uses retrieval supervision on Natural Questions and TriviaQA.",
+     "cited_pages": [
+      [
+       "rag_lewis2020.pdf",
+       5
+      ]
+     ],
+     "warnings": [],
+     "answered": true,
+     "cites_evidence": true,
+     "ref_in_answer": null,
+     "latency_s": 7.7
+    },
+    {
+     "id": "D03",
+     "category": "direct",
+     "status": "Verified",
+     "answer": "The BEIR paper concludes that BM25 is the baseline model used for evaluation, as indicated in Table 6 of the paper where it lists 'Model=BM25 (Anserini)' as one of the publicly available model links used for evaluation in BEIR.",
+     "cited_pages": [
+      [
+       "beir_thakur2021.pdf",
+       22
+      ]
+     ],
+     "warnings": [],
+     "answered": true,
+     "cites_evidence": false,
+     "ref_in_answer": true,
+     "latency_s": 8.9
+    },
+    {
+     "id": "D04",
+     "category": "direct",
+     "status": "Verified",
+     "answer": "BART [32]",
+     "cited_pages": [
+      [
+       "rag_lewis2020.pdf",
+       2
+      ]
+     ],
+     "warnings": [],
+     "answered": true,
+     "cites_evidence": false,
+     "ref_in_answer": null,
+     "latency_s": 7.3
+    },
+    {
+     "id": "D05",
+     "category": "direct",
+     "status": "Verified",
+     "answer": "The knowledge source for RAG is built from the December 2018 dump of Wikipedia.",
+     "cited_pages": [
+      [
+       "rag_lewis2020.pdf",
+       4
+      ]
+     ],
+     "warnings": [],
+     "answered": true,
+     "cites_evidence": true,
+     "ref_in_answer": true,
+     "latency_s": 12.5
+    },
+    {
+     "id": "D06",
+     "category": "direct",
+     "status": "Verified",
+     "answer": "21M",
+     "cited_pages": [
+      [
+       "rag_lewis2020.pdf",
+       4
+      ]
+     ],
+     "warnings": [],
+     "answered": true,
+     "cites_evidence": true,
+     "ref_in_answer": false,
+     "latency_s": 7.0
+    },
+    {
+     "id": "D07",
+     "category": "direct",
+     "status": "Insufficient Evidence",
+     "answer": "Insufficient evidence: the retrieved passages do not contain enough information to answer this question.",
+     "cited_pages": [],
+     "warnings": [
+      "unsupported_claim"
+     ],
+     "answered": false,
+     "cites_evidence": false,
+     "ref_in_answer": null,
+     "latency_s": 7.2
+    },
+    {
+     "id": "D08",
+     "category": "direct",
+     "status": "Verified",
+     "answer": "We train with mixed precision floating point arithmetic [40], distributing training across 8, 32GB NVIDIA V100 GPUs.",
+     "cited_pages": [
+      [
+       "rag_lewis2020.pdf",
+       17
+      ]
+     ],
+     "warnings": [],
+     "answered": true,
+     "cites_evidence": false,
+     "ref_in_answer": false,
+     "latency_s": 11.8
+    },
+    {
+     "id": "D09",
+     "category": "direct",
+     "status": "Insufficient Evidence",
+     "answer": "Insufficient evidence: the retrieved passages do not contain enough information to answer this question.",
+     "cited_pages": [],
+     "warnings": [
+      "unsupported_claim"
+     ],
+     "answered": false,
+     "cites_evidence": false,
+     "ref_in_answer": null,
+     "latency_s": 7.7
+    },
+    {
+     "id": "D10",
+     "category": "direct",
+     "status": "Verified",
+     "answer": "Our fine-tuned reward model shows high prediction matching with GPT-4 predicted feedback with an overall accuracy of the reward model as shown in Table 5.",
+     "cited_pages": [
+      [
+       "selfrag_asai2023.pdf",
+       17
+      ]
+     ],
+     "warnings": [],
+     "answered": true,
+     "cites_evidence": false,
+     "ref_in_answer": false,
+     "latency_s": 7.7
+    },
+    {
+     "id": "D11",
+     "category": "direct",
+     "status": "Insufficient Evidence",
+     "answer": "Insufficient evidence: the retrieved passages do not contain enough information to answer this question.",
+     "cited_pages": [],
+     "warnings": [
+      "unsupported_claim",
+      "numeric_mismatch",
+      "numeric_mismatch"
+     ],
+     "answered": false,
+     "cites_evidence": false,
+     "ref_in_answer": false,
+     "latency_s": 12.6
+    },
+    {
+     "id": "D12",
+     "category": "direct",
+     "status": "Insufficient Evidence",
+     "answer": "Insufficient evidence: the retrieved passages do not contain enough information to answer this question.",
+     "cited_pages": [],
+     "warnings": [
+      "unsupported_claim"
+     ],
+     "answered": false,
+     "cites_evidence": false,
+     "ref_in_answer": false,
+     "latency_s": 12.5
+    },
+    {
+     "id": "S01",
+     "category": "scanned",
+     "status": "Verified",
+     "answer": "28.4 BLEU",
+     "cited_pages": [
+      [
+       "transformer_vaswani2017_scanned.pdf",
+       8
+      ]
+     ],
+     "warnings": [],
+     "answered": true,
+     "cites_evidence": true,
+     "ref_in_answer": true,
+     "latency_s": 7.2
+    },
+    {
+     "id": "S02",
+     "category": "scanned",
+     "status": "Partially Supported",
+     "answer": "We used the Adam optimizer [20] with 3; = 0.9, β2 = 0.98 and β = 10~°.",
+     "cited_pages": [
+      [
+       "transformer_vaswani2017_scanned.pdf",
+       7
+      ]
+     ],
+     "warnings": [
+      "ocr_uncertainty"
+     ],
+     "answered": true,
+     "cites_evidence": true,
+     "ref_in_answer": true,
+     "latency_s": 8.7
+    },
+    {
+     "id": "S03",
+     "category": "scanned",
+     "status": "Verified",
+     "answer": "6",
+     "cited_pages": [
+      [
+       "transformer_vaswani2017_scanned.pdf",
+       3
+      ]
+     ],
+     "warnings": [],
+     "answered": true,
+     "cites_evidence": true,
+     "ref_in_answer": true,
+     "latency_s": 10.9
+    },
+    {
+     "id": "S04",
+     "category": "scanned",
+     "status": "Verified",
+     "answer": "The Transformer models were trained on 8 P100 GPUs.",
+     "cited_pages": [
+      [
+       "transformer_vaswani2017_scanned.pdf",
+       8
+      ]
+     ],
+     "warnings": [],
+     "answered": true,
+     "cites_evidence": true,
+     "ref_in_answer": true,
+     "latency_s": 7.0
+    },
+    {
+     "id": "S05",
+     "category": "scanned",
+     "status": "Partially Supported",
+     "answer": "0.1",
+     "cited_pages": [
+      [
+       "transformer_vaswani2017_scanned.pdf",
+       8
+      ]
+     ],
+     "warnings": [
+      "ocr_uncertainty"
+     ],
+     "answered": true,
+     "cites_evidence": true,
+     "ref_in_answer": true,
+     "latency_s": 43.7
+    },
+    {
+     "id": "S06",
+     "category": "scanned",
+     "status": "Verified",
+     "answer": "The Transformer used a beam size of 4 and a length penalty a = 0.6 at inference.",
+     "cited_pages": [
+      [
+       "transformer_vaswani2017_scanned.pdf",
+       8
+      ]
+     ],
+     "warnings": [],
+     "answered": true,
+     "cites_evidence": true,
+     "ref_in_answer": true,
+     "latency_s": 13.5
+    },
+    {
+     "id": "S07",
+     "category": "scanned",
+     "status": "Partially Supported",
+     "answer": "Multi-head attention allows the model to jointly attend to information from different representation subspaces at different positions. It works by projecting the queries, keys, and values into h = 8 parallel attention layers, or heads. Each head has its own set of projections, and the outputs of these heads are concatenated and once again projected, resulting in the final values.",
+     "cited_pages": [
+      [
+       "transformer_vaswani2017_scanned.pdf",
+       3
+      ],
+      [
+       "transformer_vaswani2017_scanned.pdf",
+       5
+      ]
+     ],
+     "warnings": [
+      "unsupported_claim",
+      "ocr_uncertainty"
+     ],
+     "answered": true,
+     "cites_evidence": true,
+     "ref_in_answer": null,
+     "latency_s": 11.1
+    },
+    {
+     "id": "T01",
+     "category": "table",
+     "status": "Insufficient Evidence",
+     "answer": "Insufficient evidence: the retrieved passages do not contain enough information to answer this question.",
+     "cited_pages": [],
+     "warnings": [
+      "unsupported_claim",
+      "numeric_mismatch"
+     ],
+     "answered": false,
+     "cites_evidence": false,
+     "ref_in_answer": false,
+     "latency_s": 255.9
+    },
+    {
+     "id": "T02",
+     "category": "table",
+     "status": "Partially Supported",
+     "answer": "0.656",
+     "cited_pages": [
+      [
+       "beir_thakur2021.pdf",
+       7
+      ]
+     ],
+     "warnings": [
+      "unsupported_claim"
+     ],
+     "answered": true,
+     "cites_evidence": true,
+     "ref_in_answer": true,
+     "latency_s": 375.3
+    },
+    {
+     "id": "T03",
+     "category": "table",
+     "status": "Insufficient Evidence",
+     "answer": "Insufficient evidence: the retrieved passages do not contain enough information to answer this question.",
+     "cited_pages": [],
+     "warnings": [
+      "numeric_mismatch"
+     ],
+     "answered": false,
+     "cites_evidence": false,
+     "ref_in_answer": false,
+     "latency_s": 142.2
+    },
+    {
+     "id": "T04",
+     "category": "table",
+     "status": "Verified",
+     "answer": "230ms",
+     "cited_pages": [
+      [
+       "beir_thakur2021.pdf",
+       8
+      ]
+     ],
+     "warnings": [],
+     "answered": true,
+     "cites_evidence": true,
+     "ref_in_answer": true,
+     "latency_s": 53.2
+    },
+    {
+     "id": "T05",
+     "category": "table",
+     "status": "Verified",
+     "answer": "323",
+     "cited_pages": [
+      [
+       "beir_thakur2021.pdf",
+       4
+      ]
+     ],
+     "warnings": [],
+     "warning_messages": [],
+     "answered": true,
+     "cites_evidence": true,
+     "ref_in_answer": true,
+     "latency_s": 33.6
+    },
+    {
+     "id": "T06",
+     "category": "table",
+     "status": "Insufficient Evidence",
+     "answer": "Insufficient evidence: the retrieved passages do not contain enough information to answer this question.",
+     "cited_pages": [],
+     "warnings": [
+      "unsupported_claim",
+      "numeric_mismatch"
+     ],
+     "warning_messages": [
+      "claim 1 is not supported by its cited passage(s) DOC03_P4_C6 (judge found no support in the cited passages): \"44.0\"",
+      "claim 1: value '44.0' does not appear in the cited evidence (DOC03_P4_C6); proposed calculation rejected: expression has disallowed characters: 'null'"
+     ],
+     "answered": false,
+     "cites_evidence": false,
+     "ref_in_answer": false,
+     "withheld_answer": "44.0",
+     "latency_s": 9.3
+    },
+    {
+     "id": "T07",
+     "category": "table",
+     "status": "Verified",
+     "answer": "31.8%",
+     "cited_pages": [
+      [
+       "beir_thakur2021.pdf",
+       9
+      ]
+     ],
+     "warnings": [],
+     "warning_messages": [],
+     "answered": true,
+     "cites_evidence": true,
+     "ref_in_answer": true,
+     "latency_s": 8.7
+    },
+    {
+     "id": "T08",
+     "category": "table",
+     "status": "Insufficient Evidence",
+     "answer": "Insufficient evidence: the retrieved passages do not contain enough information to answer this question.",
+     "cited_pages": [],
+     "warnings": [],
+     "warning_messages": [],
+     "answered": false,
+     "cites_evidence": false,
+     "ref_in_answer": false,
+     "latency_s": 3.7
+    },
+    {
+     "id": "T09",
+     "category": "table",
+     "status": "Verified",
+     "answer": "49",
+     "cited_pages": [
+      [
+       "beir_thakur2021.pdf",
+       4
+      ]
+     ],
+     "warnings": [],
+     "warning_messages": [],
+     "answered": true,
+     "cites_evidence": true,
+     "ref_in_answer": true,
+     "latency_s": 6.8
+    },
+    {
+     "id": "T10",
+     "category": "table",
+     "status": "Verified",
+     "answer": "0.539",
+     "cited_pages": [
+      [
+       "beir_thakur2021.pdf",
+       24
+      ]
+     ],
+     "warnings": [],
+     "warning_messages": [],
+     "answered": true,
+     "cites_evidence": true,
+     "ref_in_answer": true,
+     "latency_s": 9.7
+    },
+    {
+     "id": "M01",
+     "category": "multi_doc",
+     "status": "Insufficient Evidence",
+     "answer": "Insufficient evidence: the retrieved passages do not contain enough information to answer this question.",
+     "cited_pages": [],
+     "warnings": [
+      "unsupported_claim"
+     ],
+     "warning_messages": [
+      "claim 1 is not supported by its cited passage(s) DOC03_P7_C4, DOC04_P1_C6 (judge said supported, but its quote does not mention what the claim states): \"Self-RAG uses a learned retrieval mechanism, while RAG uses a dense retriever.\""
+     ],
+     "answered": false,
+     "cites_evidence": false,
+     "ref_in_answer": null,
+     "withheld_answer": "Self-RAG uses a learned retrieval mechanism, while RAG uses a dense retriever.",
+     "latency_s": 8.2
+    },
+    {
+     "id": "M02",
+     "category": "multi_doc",
+     "status": "Insufficient Evidence",
+     "answer": "Insufficient evidence: the retrieved passages do not contain enough information to answer this question.",
+     "cited_pages": [],
+     "warnings": [
+      "unsupported_claim",
+      "numeric_mismatch"
+     ],
+     "warning_messages": [
+      "claim 1 is not supported by its cited passage(s) DOC01_P8_C6, DOC04_P16_C1 (judge found no support in the cited passages): \"The Transformer used 8 P100 GPUs for training, while Self-RAG details are provided in Appendix A of the document, with no specific mention of the GPUs used for training.\"",
+      "claim 1: value '8' does not appear in the cited evidence (DOC01_P8_C6, DOC04_P16_C1)"
+     ],
+     "answered": false,
+     "cites_evidence": false,
+     "ref_in_answer": false,
+     "withheld_answer": "The Transformer used 8 P100 GPUs for training, while Self-RAG details are provided in Appendix A of the document, with no specific mention of the GPUs used for training.",
+     "latency_s": 15.2
+    },
+    {
+     "id": "M03",
+     "category": "multi_doc",
+     "status": "Insufficient Evidence",
+     "answer": "Insufficient evidence: the retrieved passages do not contain enough information to answer this question.",
+     "cited_pages": [],
+     "warnings": [],
+     "warning_messages": [],
+     "answered": false,
+     "cites_evidence": false,
+     "ref_in_answer": false,
+     "latency_s": 3.3
+    },
+    {
+     "id": "M04",
+     "category": "multi_doc",
+     "status": "Partially Supported",
+     "answer": "We used the Adam optimizer with 3; = 0.9, 52 = 0.98 and « = 10~°. We varied the learning rate over the course of training, according to the formula: lrate = ye -min(step_num~°°, step_num - warmup_steps~'*) (3) This corresponds to increasing the learning rate linearly for the first warmup_steps training steps, and decreasing it thereafter proportionally to the inverse square root of the step number. We used warmup_steps = 4000.",
+     "cited_pages": [
+      [
+       "transformer_vaswani2017_scanned.pdf",
+       7
+      ]
+     ],
+     "warnings": [
+      "ocr_uncertainty"
+     ],
+     "warning_messages": [
+      "DOC01_P7_C5 (transformer_vaswani2017_scanned.pdf p.7) is OCR text that may contain errors: 7 stray OCR symbols («~°); garbled symbols before '=' (e.g. Greek letters misread as digits); numbers in claim(s) 1, 2, 3 may be misread"
+     ],
+     "answered": true,
+     "cites_evidence": true,
+     "ref_in_answer": false,
+     "latency_s": 19.2
+    },
+    {
+     "id": "M05",
+     "category": "multi_doc",
+     "status": "Verified",
+     "answer": "DPR's retriever is initialized using DPR's retriever, which uses retrieval supervision on Natural Questions and TriviaQA. RAG compares favorably to the DPR QA system, which uses a BERT-based 'cross-encoder' to re-rank documents, along with an extractive reader. RAG demonstrates that neither a re-ranker nor extractive reader is necessary for state-of-the-art performance.",
+     "cited_pages": [
+      [
+       "rag_lewis2020.pdf",
+       5
+      ]
+     ],
+     "warnings": [],
+     "warning_messages": [],
+     "answered": true,
+     "cites_evidence": true,
+     "ref_in_answer": null,
+     "latency_s": 11.3
+    },
+    {
+     "id": "M06",
+     "category": "multi_doc",
+     "status": "Verified",
+     "answer": "RAG retrieves passages indiscriminately without ensuring complete support from cited sources, whereas Self-RAG selects passages based on their relevance and support, selecting d1 at the first time step since d2 does not provide direct evidence and d3 output is only partially supported while d1 are fully supported.",
+     "cited_pages": [
+      [
+       "selfrag_asai2023.pdf",
+       3
+      ],
+      [
+       "selfrag_asai2023.pdf",
+       4
+      ]
+     ],
+     "warnings": [],
+     "warning_messages": [],
+     "answered": true,
+     "cites_evidence": true,
+     "ref_in_answer": null,
+     "latency_s": 9.3
+    },
+    {
+     "id": "M07",
+     "category": "multi_doc",
+     "status": "Verified",
+     "answer": "Table 6 in DOC03_P7_C4 shows that BM25 performs best for FEVER, possibly due to its entity-centric claims. Differentiable retrieval improves results on all other tasks, especially for Open-Domain QA, where it is crucial.",
+     "cited_pages": [
+      [
+       "rag_lewis2020.pdf",
+       7
+      ]
+     ],
+     "warnings": [],
+     "warning_messages": [],
+     "answered": true,
+     "cites_evidence": true,
+     "ref_in_answer": true,
+     "latency_s": 9.6
+    },
+    {
+     "id": "U01",
+     "category": "unanswerable",
+     "status": "Insufficient Evidence",
+     "answer": "Insufficient evidence: the retrieved passages do not contain enough information to answer this question.",
+     "cited_pages": [],
+     "warnings": [],
+     "warning_messages": [],
+     "correct_abstention": true,
+     "latency_s": 3.0
+    },
+    {
+     "id": "U02",
+     "category": "unanswerable",
+     "status": "Insufficient Evidence",
+     "answer": "Insufficient evidence: the retrieved passages do not contain enough information to answer this question.",
+     "cited_pages": [],
+     "warnings": [],
+     "warning_messages": [],
+     "correct_abstention": true,
+     "latency_s": 0.0
+    }
+   ]
+  }
+ }
+}

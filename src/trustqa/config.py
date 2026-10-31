@@ -36,6 +36,21 @@ class Config:
     # Retrieval
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     top_k: int = 5
+    # Retrieval upgrades (Phase 4), all off by default so baselines are unchanged. They only
+    # reorder chunks: RetrievedChunk.score stays the dense cosine (the abstention gate's
+    # threshold is calibrated on it). Measured in eval/retrieval_eval.py.
+    retrieval_hybrid: bool = False  # BM25 + dense, merged by reciprocal rank fusion (FR-15)
+    rrf_k: int = 60  # RRF constant: score = sum 1 / (rrf_k + rank)
+    retrieval_candidates: int = 50  # per-retriever candidate pool for fusion/diversify/rerank
+    retrieval_diversify: str = "none"  # none | quota (max doc_quota chunks per doc) | mmr
+    doc_quota: int = 2
+    mmr_lambda: float = 0.7  # MMR: weight of relevance vs. redundancy
+    rerank: bool = False  # cross-encoder reranking of the candidate pool
+    reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    # LLM splits a multi-entity question into sub-queries; each is retrieved and the lists are
+    # merged by RRF with the original question's list (one extra LLM call per question).
+    retrieval_decompose: bool = False
+    max_subqueries: int = 3
 
     # Chunking (characters)
     chunk_size: int = 800
@@ -100,14 +115,35 @@ class Config:
         if not 0 < self.quote_min_similarity <= 100:
             raise ConfigError("quote_min_similarity must be in (0, 100], got "
                               f"{self.quote_min_similarity}")
+        if self.retrieval_diversify not in {"none", "quota", "mmr"}:
+            raise ConfigError("retrieval_diversify must be none, quota or mmr, got "
+                              f"{self.retrieval_diversify!r}")
+        if self.rrf_k < 1 or self.retrieval_candidates < 1 or self.doc_quota < 1:
+            raise ConfigError("rrf_k, retrieval_candidates and doc_quota must be >= 1")
+        if not 0 <= self.mmr_lambda <= 1:
+            raise ConfigError(f"mmr_lambda must be in [0, 1], got {self.mmr_lambda}")
+        if not 1 <= self.max_subqueries <= 5:
+            raise ConfigError(f"max_subqueries must be in [1, 5], got {self.max_subqueries}")
         if self.baseline_b:  # frozen dataclass: resolve the preset in place
             object.__setattr__(self, "flatten_tables", True)
             object.__setattr__(self, "verify", False)
+        if self.is_frozen_baseline:
+            # A and B are plain dense RAG (frozen at v0.1/v0.2): Phase 4 retrieval upgrades
+            # set in .env cannot leak into them.
+            object.__setattr__(self, "retrieval_hybrid", False)
+            object.__setattr__(self, "retrieval_diversify", "none")
+            object.__setattr__(self, "rerank", False)
+            object.__setattr__(self, "retrieval_decompose", False)
+
+    @property
+    def is_frozen_baseline(self) -> bool:
+        """True for baseline systems A and B (tables flattened, no verification)."""
+        return self.flatten_tables and not self.verify
 
     @property
     def system_name(self) -> str:
         """Which evaluation system this configuration reproduces (PRD / phases.md)."""
-        if self.flatten_tables and not self.verify:
+        if self.is_frozen_baseline:
             return "B-ocr-plain-rag" if self.ocr_enabled else "A-baseline"
         return "C-trustqa"
 
@@ -176,6 +212,16 @@ def load_config(env_file: str | Path | None = None, **overrides: Any) -> Config:
         anthropic_api_key=_env_str("ANTHROPIC_API_KEY", None),
         embedding_model=_env_str("EMBEDDING_MODEL", d.embedding_model),
         top_k=_env_int("TOP_K", d.top_k),
+        retrieval_hybrid=_env_bool("RETRIEVAL_HYBRID", d.retrieval_hybrid),
+        rrf_k=_env_int("RRF_K", d.rrf_k),
+        retrieval_candidates=_env_int("RETRIEVAL_CANDIDATES", d.retrieval_candidates),
+        retrieval_diversify=_env_str("RETRIEVAL_DIVERSIFY", d.retrieval_diversify),
+        doc_quota=_env_int("DOC_QUOTA", d.doc_quota),
+        mmr_lambda=_env_float("MMR_LAMBDA", d.mmr_lambda),
+        rerank=_env_bool("RERANK", d.rerank),
+        reranker_model=_env_str("RERANKER_MODEL", d.reranker_model),
+        retrieval_decompose=_env_bool("RETRIEVAL_DECOMPOSE", d.retrieval_decompose),
+        max_subqueries=_env_int("MAX_SUBQUERIES", d.max_subqueries),
         chunk_size=_env_int("CHUNK_SIZE", d.chunk_size),
         chunk_overlap=_env_int("CHUNK_OVERLAP", d.chunk_overlap),
         tesseract_cmd=_env_str("TESSERACT_CMD", None),

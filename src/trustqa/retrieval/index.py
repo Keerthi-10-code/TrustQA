@@ -116,6 +116,22 @@ class SearchIndex:
         scores, idx = self.index.search(q, min(top_k, len(self)))
         return [(self.chunks[i], float(s)) for i, s in zip(idx[0], scores[0]) if i >= 0]
 
+    def embed_query(self, query: str) -> np.ndarray:
+        """Unit-length query vector, shape (dim,)."""
+        q = _as_unit_rows(self.embedder.encode([query]))
+        if q.shape[1] != self.index.d:
+            raise ValueError(f"query dim {q.shape[1]} != index dim {self.index.d}; "
+                             f"was the index built with {self.embedding_model}?")
+        return q[0]
+
+    def vectors(self) -> np.ndarray:
+        """All stored chunk vectors, (len(self), dim), aligned with self.chunks (cached)."""
+        v = getattr(self, "_vectors", None)
+        if v is None:
+            v = self.index.reconstruct_n(0, self.index.ntotal)
+            self._vectors = v
+        return v
+
     def save(self, directory: str | Path) -> None:
         d = Path(directory)
         d.mkdir(parents=True, exist_ok=True)

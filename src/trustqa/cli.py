@@ -16,7 +16,7 @@ from pathlib import Path
 from trustqa.config import ConfigError, load_config
 from trustqa.llm import LLMError
 from trustqa.pipeline import answer_question, get_or_build_index
-from trustqa.retrieval.search import retrieve
+from trustqa.retrieval.search import retrieve_with_config
 from trustqa.schemas import Result
 
 
@@ -74,7 +74,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.show_passages:
             index = get_or_build_index(docs, config)
             print("Retrieved passages:")
-            for r in retrieve(args.question, config.top_k, index):
+            for r in retrieve_with_config(args.question, config.top_k, index, config):
                 c = r.chunk
                 print(f"  {r.rank}. {c.chunk_id} ({c.document_name} p{c.page_number}) "
                       f"score={r.score:.3f}: {c.text[:160]}")

@@ -86,6 +86,16 @@ def fake_embedder(monkeypatch) -> FakeEmbedder:
 
 
 @pytest.fixture(autouse=True)
+def _retrieval_flags_off(monkeypatch):
+    """Tests do not depend on the developer's .env retrieval settings: real environment
+    variables win over .env, so pin the Phase 4 flags to their defaults. Tests that want a
+    flag pass it to load_config() or set it with monkeypatch.setenv."""
+    for k, v in {"RETRIEVAL_HYBRID": "0", "RETRIEVAL_DIVERSIFY": "none", "RERANK": "0",
+                 "RETRIEVAL_DECOMPOSE": "0"}.items():
+        monkeypatch.setenv(k, v)
+
+
+@pytest.fixture(autouse=True)
 def _reset_llm():
     yield
     llm_mod.set_llm(None)

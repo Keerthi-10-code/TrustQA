@@ -11,12 +11,14 @@ Source runs: Phase 2 exit check, 2026-10-31 (qwen2.5:3b, top_k=5, MiniLM + FAISS
 |---|---|---|---|
 | F1 | OCR confidence does not flag garbled symbols | Addressed | Phase 3 (item 6) - done |
 | F2 | Tables on scanned pages are not extracted; OCR misreads numbers | **Act on** | When real scanned PDFs arrive (Phase 6 dataset) |
-| F3 | Retrieval miss: TAS-B on FiQA-2018 table row | Planned | Phase 4 (BM25 + RRF) |
-| F4 | Retrieval miss: scanned "Adam optimizer / beta2" passage | Planned | Phase 4 |
+| F3 | Retrieval miss: TAS-B on FiQA-2018 table row | Fixed (hybrid, on for C); generator error now caught | Phase 4 - done |
+| F4 | Retrieval miss: scanned "Adam optimizer / beta2" passage | Fixed (hybrid, on for C) | Phase 4 - done |
 | F5 | Model misreads the correctly retrieved row (BM25+CE "+ 11%" -> "0.347") | Caught | Phase 3 (items 3-4) - done |
 | F6 | Table layout edge cases (multi-row labels, centred cells, packed columns, merged cells) | Minor | Phase 6 error analysis |
 | F7 | Answers rarely restate unit / period | Minor | Phase 5 UI |
 | F8 | "Period" only tested on synthetic data | Minor | Phase 6 dataset |
+| F12 | Multi-doc questions: one document's evidence not retrieved | **Act on** | Phase 6 (decomposition with a stronger LLM) |
+| F13 | Verified answer about the wrong entity (RAG quote for a Self-RAG question) | **Act on** | Phase 6 judge audit |
 
 ---
 
@@ -53,14 +55,24 @@ Source runs: Phase 2 exit check, 2026-10-31 (qwen2.5:3b, top_k=5, MiniLM + FAISS
   top-5 for C; the top hits were RAG Table 6 rows. The model correctly abstained. A and B answered with wrong numbers.
 - **Why:** dense MiniLM embeddings match names and numbers poorly ("FiQA-2018", "TAS-B").
 - **Fix idea:** BM25 + reciprocal rank fusion (Phase 4). Re-run this question in the before/after table.
-- **Status:** open (expected fix in Phase 4).
+- **Status:** fixed (retrieval) with `RETRIEVAL_HYBRID=1`, now on for system C in `.env` (dev question T01: page 7 at
+  rank 10 dense -> rank 1 hybrid; see `eval/results/retrieval_phase4.md`). Answer level (Phase 4 answer check,
+  qwen2.5:3b): the row chunk `DOC02_P7_T1_R7` (`Dense / TAS-B=0.300`) is retrieved, but the model answered "0.593", a
+  number that is not in the row. Verification withheld it (`numeric_mismatch` -> Insufficient Evidence), which is the
+  correct outcome for a wrong number. In the same answer the support judge's output was truncated at
+  `LLM_MAX_TOKENS=2048` and the calculation step returned an unparsable expression; both failed safe (claims
+  unverified, calculation rejected). The remaining problem is generation quality with a 3B model (cf. F5), not
+  retrieval; re-test with a larger model in Phase 6.
 
 ## F4 - Retrieval miss: scanned "Adam / beta2" passage
 - **What:** "Which optimizer was used to train the Transformer, and what was beta2?" The passage `DOC01_P7_C5` was not
   in the top-5 (top hits were p1 and p8), so B and C abstained.
 - **Why:** the question term "beta2" does not appear in the OCR text (see F1), so lexical and semantic overlap is weak.
 - **Fix idea:** Phase 4 BM25 on "Adam optimizer"; F1's fix would also make the text matchable.
-- **Status:** open.
+- **Status:** fixed with `RETRIEVAL_HYBRID=1`, now on for system C (dev question S02: not in dense top 10 -> rank 2).
+  Phase 4 answer check: dense abstained; hybrid answers "Adam ... β2 = 0.98" citing page 7, status Partially Supported
+  with an `ocr_uncertainty` warning, because the chunk is still OCR-garbled ("3; = 0.9" for β1) - the intended F1
+  behaviour. The β1 value in the answer is garbled text from the OCR, which is what the warning is for.
 
 ## F5 - Model misreads a correctly retrieved table row
 - **What:** "On average, how much better than BM25 is the BM25+CE re-ranker on BEIR?" Rank 1 was the right chunk
@@ -124,6 +136,11 @@ None of these alter numbers; they affect which label a value is associated with.
 - **What:** "What reflection tokens does Self-RAG use?" is Verified (every sentence is supported by its quote), but the
   answer names only critique tokens, not Retrieve / IsRel / IsSup / IsUse.
 - **Why:** PRD 2.3 Verified = all material claims supported + citations resolve; completeness is not a criterion.
+- **More cases (Phase 4 answer check, `eval/results/phase4_answers*.json`):** T06 dense Verified "We ... report Exact
+  Match (EM) scores" for "What exact match score does RAG-Sequence get on Natural Questions?" (no number at all);
+  M06 dense Verified an off-topic Self-RAG sentence; D10 hybrid Verified a vague sentence without the agreement
+  figures; M05 and M07 hybrid Verified answers that cover one of the two papers asked about. Verified answers that do
+  not answer the question are the most common quality gap seen in Phase 4.
 - **Fix idea:** report completeness separately in Phase 6 (answer F1 vs reference), not in the status.
 - **Status:** by design; document in the report.
 
@@ -137,3 +154,44 @@ None of these alter numbers; they affect which label a value is associated with.
   indistinguishable from real evidence at this level; provenance shows which document it came from. Prompt injection
   against the generator itself is not tested (the generator only ever sees retrieved passages).
 - **Status:** mitigated; revisit if Phase 6 documents are untrusted.
+
+## F12 - Multi-doc questions: one document's evidence is not retrieved
+- **What:** Phase 4 dev set, 7 multi-doc questions (two documents each). Complete evidence in the top 5 (all@5) is
+  0/7 for dense on C and at most 1/7 for every flag combination (hybrid, quota, MMR, reranker), and a different question
+  each time (M06 with hybrid+quota, M07 with rerank). In the dense top 10, M02 and M04-M07 each miss one document; for
+  M02 (Transformer vs Self-RAG GPUs) the Self-RAG A100 page is not in the top 10 of any variant.
+- **Why:** one query vector / one BM25 query is dominated by the document whose wording matches better; per-document
+  quota and MMR only reorder a candidate pool that does not contain the other document's evidence. The quota
+  measurably hurt single-document questions instead.
+- **Repro:** `python eval/retrieval_eval.py --grid` (multi-doc all@5 column); per-question `group_ranks` in
+  `eval/results/retrieval_grid.json`.
+- **Fix tried (Phase 4):** query decomposition (`RETRIEVAL_DECOMPOSE=1`, `retrieval/decompose.py`): the LLM proposes
+  one self-contained sub-query per entity, validated in Python (malformed -> no decomposition), each retrieved and
+  fused with the question by RRF. Measured with qwen2.5:3b: no gain (decompose alone R@5 +0/-0; hybrid+decompose
+  R@5 0.764 vs hybrid 0.778, multi-doc all@5 1/7 vs 0/7) at ~2.9 s per query. The model split only M02 into one query
+  per paper; M05/M06 got paraphrases naming both papers, M01/M03/M04/M07 were not split, and single-document questions
+  (S02, S06, S07, D11, T06) were split into paraphrases. Where the split was right it worked: M02's Self-RAG A100 page,
+  absent from the top 10 of every other variant, came in at rank 3 with hybrid+decompose.
+- **Answer level (Phase 4 answer check):** with dense and with hybrid, no multi-doc answer covers both documents'
+  parts of the reference: M01-M03 are abstained or withheld (M02: "Self-RAG details are provided in Appendix A ... no
+  specific mention of the GPUs"), M04, M05 and M07 cover one paper.
+- **Status:** open. The mechanism works; qwen2.5:3b's splitting does not. Flag kept, default off. Next: rerun
+  `python eval/retrieval_eval.py --grid --decompose` with `LLM_PROVIDER=groq` (needs `GROQ_API_KEY`) and on the
+  Phase 6 multi-doc questions.
+
+## F13 - Verified answer about the wrong entity
+- **What:** Phase 4 answer check, dense retrieval, dev question D09 "Which retriever does Self-RAG use by default?"
+  (reference: Contriever-MS MARCO, Self-RAG p7/p20). The answer "DPR's retriever" was **Verified**, citing RAG p5:
+  "RAG's retriever is initialized using DPR's retriever". The quote exists, contains the answer's words and passes the
+  relevance rule, but it is about RAG, not Self-RAG.
+- **Why:** the Self-RAG evidence was in the top 5 (rank 2), but the generator answered from the RAG passage; the
+  support judge checks that the quote supports the claim text, and a short answer is judged
+  against the question by qwen2.5:3b, which did not notice the entity mismatch. Nothing deterministic checks that the
+  cited passage is about the entity the question names.
+- **Repro:** `python eval/answer_check.py --variants dense --out ...` (D09 row in `eval/results/phase4_answers.json`).
+  With hybrid retrieval the same question abstains (its evidence drops to rank 7), so the failure is not reached, but
+  the gap remains.
+- **Fix idea:** in the Phase 6 judge audit, count Verified-but-wrong answers; candidates: a deterministic check that a
+  named entity in the question (here "Self-RAG") occurs in the cited chunk or its document title, and a stronger
+  judge model (F9).
+- **Status:** open.

@@ -24,7 +24,7 @@ from trustqa.retrieval.index import (
     build_index,
     mark_latest,
 )
-from trustqa.retrieval.search import retrieve
+from trustqa.retrieval.search import retrieve_with_config
 from trustqa.schemas import Result
 from trustqa.verification.verify import VERIFIER_VERSION, run_verification
 
@@ -135,7 +135,8 @@ def answer_question(
     config = config or load_config()
     run_record(config)
     index = get_or_build_index(uploaded_docs, config)
-    passages = retrieve(question, config.top_k, index)
+    passages = retrieve_with_config(question, config.top_k, index, config,
+                                    _llm_for(config))
     if not config.verify:
         return answer_unverified(question, passages, _llm_for(config))
     return run_verification(question, passages, _llm_for(config), config)
