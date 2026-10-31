@@ -229,6 +229,32 @@ def get_llm(config: Config | None = None) -> LLM:
         ) from None
 
 
+def check_available(config: Config, timeout_s: float = 3.0) -> str:
+    """Check that the configured provider can be used, without a paid model call.
+
+    Raises ConfigError for missing API keys / packages / unknown providers and LLMError
+    when the local Ollama server is unreachable or the model is not pulled. Returns a
+    short description such as "ollama qwen2.5:3b". An LLM installed with set_llm() is
+    always available.
+    """
+    if overridden_llm() is not None:
+        return "override"
+    get_llm(config)  # constructing a provider validates its key and package
+    if config.llm_provider == "ollama":
+        host = config.ollama_host.rstrip("/")
+        try:
+            with urllib.request.urlopen(f"{host}/api/tags", timeout=timeout_s) as resp:
+                tags = _json.loads(resp.read())
+        except (urllib.error.URLError, TimeoutError, OSError, ValueError) as e:
+            raise LLMError(f"cannot reach Ollama at {host} ({e}). Is Ollama installed "
+                           "and running?") from e
+        names = {m.get("name", "") for m in tags.get("models", [])}
+        wanted = config.llm_model
+        if wanted not in names and f"{wanted}:latest" not in names:
+            raise LLMError(f"Ollama model {wanted!r} is not pulled; run: ollama pull {wanted}")
+    return f"{config.llm_provider} {config.llm_model}"
+
+
 _default: LLM | None = None
 _overridden = False
 

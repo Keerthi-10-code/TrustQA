@@ -7,6 +7,7 @@ data/raw_pdfs/**/*.pdf
 data/ocr_ground_truth/
 data/processed/*
 data/indexes/*
+data/uploads/
 !data/**/.gitkeep
 eval/results/*
 !eval/results/.gitkeep

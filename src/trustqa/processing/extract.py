@@ -150,22 +150,31 @@ class DocumentRegistry:
         return len(self._entries)
 
 
+class UnreadablePdfError(ValueError):
+    """The file is missing, damaged or not a PDF (NFR-09)."""
+
+
+class EncryptedPdfError(UnreadablePdfError):
+    """The PDF needs a password to open (NFR-09)."""
+
+
 def open_pdf(path: str | Path, document_name: str | None = None) -> pymupdf.Document:
-    """Open a PDF for reading. Raises ValueError if missing, unreadable or encrypted (NFR-09)."""
+    """Open a PDF for reading. Raises UnreadablePdfError (a ValueError) if missing,
+    unreadable or not a PDF, and EncryptedPdfError if it is password-protected (NFR-09)."""
     p = Path(path)
     name = document_name or p.name
     if not p.is_file():
-        raise ValueError(f"{name}: file not found ({p})")
+        raise UnreadablePdfError(f"{name}: file not found ({p})")
     try:
         doc = pymupdf.open(p)
     except Exception as e:  # PyMuPDF raises several types for corrupt input
-        raise ValueError(f"{name}: not a readable PDF ({e})") from e
+        raise UnreadablePdfError(f"{name}: not a readable PDF ({e})") from e
     if not doc.is_pdf:
         doc.close()
-        raise ValueError(f"{name}: not a PDF file")
+        raise UnreadablePdfError(f"{name}: not a PDF file")
     if doc.needs_pass:
         doc.close()
-        raise ValueError(f"{name}: PDF is encrypted / password-protected")
+        raise EncryptedPdfError(f"{name}: PDF is encrypted / password-protected")
     return doc
 
 

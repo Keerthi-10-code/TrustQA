@@ -48,3 +48,17 @@ one chunk per row (`DOC02_P7_T1_R3`) whose text carries the caption, units and e
 `header=value` pair, with the structured row kept in `table_data`.
 Systems: A = `OCR_ENABLED=0 FLATTEN_TABLES=1 VERIFY=0` (`eval/configs/system_A.json`),
 B = `BASELINE_B=1` (`eval/configs/system_B.json`), C = defaults.
+
+## Demo app (Phase 5)
+```
+streamlit run app/streamlit_app.py
+```
+Upload PDFs in the browser and ask a question. Each answer shows a status badge (Verified /
+Partially Supported / Insufficient Evidence), warnings, and citations (document, page, supporting quote).
+The evidence panel renders the cited page with the quote highlighted, plus the full structured
+table for table citations. Turn on "Compare with a baseline" in the sidebar to answer the same
+question with baseline B or A side by side. Processing is cached per file (by content hash) under
+`data/processed/documents/`, so re-uploading is instant. Uploads are stored in `data/uploads/`.
+Unreadable, encrypted or empty PDFs and LLM problems (missing API key, Ollama not running)
+are reported in the UI.
+

@@ -25,7 +25,7 @@ from trustqa.retrieval.index import (
     mark_latest,
 )
 from trustqa.retrieval.search import retrieve_with_config
-from trustqa.schemas import Result
+from trustqa.schemas import Result, RetrievedChunk
 from trustqa.verification.verify import VERIFIER_VERSION, run_verification
 
 logger = logging.getLogger("trustqa")
@@ -137,6 +137,13 @@ def answer_question(
     index = get_or_build_index(uploaded_docs, config)
     passages = retrieve_with_config(question, config.top_k, index, config,
                                     _llm_for(config))
+    return answer_from_passages(question, passages, config)
+
+
+def answer_from_passages(question: str, passages: Sequence[RetrievedChunk],
+                         config: Config) -> Result:
+    """Generate (and, unless config.verify is off, verify) an answer from retrieved
+    passages. Shared by answer_question and the Streamlit demo (corpus.Corpus.ask)."""
     if not config.verify:
         return answer_unverified(question, passages, _llm_for(config))
     return run_verification(question, passages, _llm_for(config), config)

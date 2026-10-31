@@ -14,7 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from collections.abc import Collection, Sequence
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -117,6 +117,14 @@ class DocumentReport:
                  page_reports=[asdict(p) for p in self.pages], table_list=self.tables)
         return d
 
+    @classmethod
+    def from_dict(cls, d: dict) -> DocumentReport:
+        """Inverse of to_dict (OCR word data is not serialised and comes back empty)."""
+        return cls(document_id=d["document_id"], document_name=d["document_name"],
+                   path=d["path"], sha256=d["sha256"],
+                   pages=[PageReport(**p) for p in d.get("page_reports", [])],
+                   tables=list(d.get("table_list", [])), warnings=list(d.get("warnings", [])))
+
 
 @dataclass
 class ProcessingResult:
@@ -135,9 +143,11 @@ def _accept_ocr(digital_alnum: int, quality_reason: str, ocr_text: str, config: 
 
 
 def process_document(entry: DocumentEntry, config: Config,
-                     pages: Collection[int] | None = None
+                     pages: Collection[int] | None = None,
+                     on_page: Callable[[int, int], None] | None = None,
                      ) -> tuple[list[Chunk], DocumentReport, list[ExtractedTable]]:
-    """Process one registered PDF. `pages` (1-indexed) limits work to those pages."""
+    """Process one registered PDF. `pages` (1-indexed) limits work to those pages.
+    `on_page(done, total)` is called after each selected page (progress display)."""
     name = entry.document_name
     report = DocumentReport(entry.document_id, name, str(entry.path), entry.sha256)
     all_tables: list[ExtractedTable] = []
@@ -169,7 +179,9 @@ def process_document(entry: DocumentEntry, config: Config,
         try:
             page_texts: list[PageText] = []
             page_tables: dict[int, list[ExtractedTable]] = {}
-            for i in selected:
+            for done, i in enumerate(selected):
+                if on_page is not None and done:
+                    on_page(done, len(selected))
                 pn = i + 1
                 q = quality[i]
                 pr = PageReport(pn, "pymupdf", q.reason, q.alnum_chars,
@@ -210,6 +222,8 @@ def process_document(entry: DocumentEntry, config: Config,
         finally:
             if plumber is not None:
                 plumber.close()
+        if on_page is not None:
+            on_page(len(selected), len(selected))
 
     chunks: list[Chunk] = []
     by_page = {p.page_number: p for p in report.pages}
