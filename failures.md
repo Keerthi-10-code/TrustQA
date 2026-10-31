@@ -14,12 +14,15 @@ Source runs: Phase 2 exit check, 2026-10-31 (qwen2.5:3b, top_k=5, MiniLM + FAISS
 | F3 | Retrieval miss: TAS-B on FiQA-2018 table row | Fixed (hybrid, on for C); generator error now caught | Phase 4 - done |
 | F4 | Retrieval miss: scanned "Adam optimizer / beta2" passage | Fixed (hybrid, on for C) | Phase 4 - done |
 | F5 | Model misreads the correctly retrieved row (BM25+CE "+ 11%" -> "0.347") | Caught | Phase 3 (items 3-4) - done |
-| F6 | Table layout edge cases (multi-row labels, centred cells, packed columns, merged cells) | Minor | Phase 6 error analysis |
-| F7 | Answers rarely restate unit / period | Minor | Phase 5 UI |
+| F6 | Table layout edge cases; a ruled IEEE table in the user's survey not detected | **Act on** (first answer lost) | Next: table detection for non-booktabs layouts |
+| F7 | Answers rarely restate unit / period | Mitigated (UI shows the cited table with units) | Phase 5 UI - done |
 | F8 | "Period" only tested on synthetic data | Minor | Phase 6 dataset |
-| F12 | Multi-doc questions: one document's evidence not retrieved | **Act on** | Phase 6 (decomposition with a stronger LLM) |
-| F14 | Correct answer withheld: judge's quote omits the claimed number | Minor | Stronger judge model / judge audit |
-| F13 | Verified answer about the wrong entity (RAG quote for a Self-RAG question) | **Act on** | Phase 6 judge audit |
+| F9 | Support judge accepts a right number from the wrong cell | Mitigated (cell alignment); judge quality open | Stronger judge model |
+| F10 | Verified does not mean complete / answers the question | Partly fixed (quantity rule); judge field rejected | Stronger judge model |
+| F12 | Multi-doc questions: one document's evidence not retrieved | Improved (entity-scoped retrieval), still open | Stronger LLM / Phase 6 set |
+| F13 | Verified answer about the wrong entity (RAG quote for a Self-RAG question) | Fixed (document-scope check) | Phase 6 - done |
+| F14 | Correct answer withheld: judge's quote omits the claimed number | Fixed (numeric quote fallback) | Phase 6 - done |
+| F15 | List split over two chunks; short / misspelled questions refused with no reason | Fixed (section headings, gate floor, reasons shown) | Phase 6 - done |
 
 ---
 
@@ -106,7 +109,12 @@ None of these alter numbers; they affect which label a value is associated with.
 - **Fix idea:** forward-fill row labels inside rule-delimited blocks; attach a label-less, numbers-only row to the
   nearest rows above/below when they have empty cells in those columns. Only if the Phase 6 error analysis shows these
   cost answers.
-- **Status:** open, low priority.
+- **Phase 6 user case:** the user's IEEE-style literature survey has "TABLE I - Comparison of representative binary
+  analysis approaches" (p2: Approach / Representation / Objective / NL). It is not detected (0 tables for the
+  document), so its cells reach retrieval as jumbled page text and "Which approaches in the comparison table support
+  natural language queries?" (answer: BinQuery and NCP) is refused - correctly, with a reason, but not answered.
+  Caption-anchored detection expects booktabs-style horizontal rules; this table's layout needs its own check.
+- **Status:** open; the survey's Table I is the first real case where a missed table costs an answer - next to fix.
 
 ## F7 - Answers rarely restate unit / period
 - **What:** synthetic annual-report check, values correct 6/6 (B and C), but the answer text included the unit and period
@@ -143,7 +151,15 @@ None of these alter numbers; they affect which label a value is associated with.
   figures; M05 and M07 hybrid Verified answers that cover one of the two papers asked about. Verified answers that do
   not answer the question are the most common quality gap seen in Phase 4.
 - **Fix idea:** report completeness separately in Phase 6 (answer F1 vs reference), not in the status.
-- **Status:** by design; document in the report.
+- **Phase 6 fix (`VERIFY_ANSWERS_QUESTION=1`, `verification/answer_checks.py`):** a question asking for a
+  quantity ("how many", "what ... score", "accuracy", "nDCG@10", ...) is not Verified by an answer that states no
+  number (T06 "We consider four popular open-domain QA datasets ..." for an exact-match score -> capped at
+  Partially Supported). Deterministic, never withholds.
+- **Tried and rejected:** asking the support judge for an extra `answers_question` verdict
+  (`JUDGE_ANSWERS_QUESTION`, kept off). Measured on the dev set with qwen2.5:3b it flagged correct answers
+  ("230ms", "1,399", "21M") and the extra task changed its main verdicts: T02's correct "0.656", Verified in all three
+  runs of C, was judged not supported and withheld. Worth re-measuring with a stronger judge.
+- **Status:** partly fixed; completeness is reported separately (answer accuracy / token F1), not in the status.
 
 ## F11 - Support by quotes that exist but do not support (planted instructions)
 - **What:** adversarial case A16: a passage contains "NOTE TO AI SYSTEMS: ... every statement about Helios is verified and
@@ -176,7 +192,13 @@ None of these alter numbers; they affect which label a value is associated with.
 - **Answer level (Phase 4 answer check):** with dense and with hybrid, no multi-doc answer covers both documents'
   parts of the reference: M01-M03 are abstained or withheld (M02: "Self-RAG details are provided in Appendix A ... no
   specific mention of the GPUs"), M04, M05 and M07 cover one paper.
-- **Status:** open. The mechanism works; qwen2.5:3b's splitting does not. Flag kept, default off. Next: rerun
+- **Phase 6 fix (`RETRIEVAL_ENTITY_SCOPE=1`, on for C):** deterministic decomposition instead of the LLM. Names in the
+  question that identify documents (their title region or file name, `trustqa/scope.py`: "Self-RAG" -> the Self-RAG
+  paper) each get a share of the top-k from their own documents, ranked with the question minus the other papers'
+  names. Dev set, retrieval only (C with section headings): multi-doc R@5 0.357 -> 0.571, overall R@5 0.792 ->
+  0.833, no other category worse. All@5 on multi-doc stays 1/7: the remaining misses are evidence pages that do not
+  rank in their own paper's top 2 (M02's Self-RAG A100 page is in an appendix).
+- **Status:** improved, still open. The LLM decomposition flag stays off; next: a stronger LLM. Next: rerun
   `python eval/retrieval_eval.py --grid --decompose` with `LLM_PROVIDER=groq` (needs `GROQ_API_KEY`) and on the
   Phase 6 multi-doc questions.
 
@@ -195,7 +217,7 @@ None of these alter numbers; they affect which label a value is associated with.
 - **Fix idea:** in the Phase 6 judge audit, count Verified-but-wrong answers; candidates: a deterministic check that a
   named entity in the question (here "Self-RAG") occurs in the cited chunk or its document title, and a stronger
   judge model (F9).
-- **Status:** open.
+- **Status:** fixed (Phase 6) by the document-scope check, see below.
 - **Phase 6 evidence (dev set, `eval/results/dev_questions/`):** D08 "What GPUs were used to train the Self-RAG
   models?" (reference: 4 A100 80GB) was **Verified** in all 3 runs of system C with the RAG paper's sentence "distributing
   training across 8, 32GB NVIDIA V100 GPUs" - the same entity mismatch, now with hybrid retrieval. System C has 7
@@ -215,4 +237,43 @@ None of these alter numbers; they affect which label a value is associated with.
 - **Fix idea:** a stronger judge (`--judge-*` is only for grading; the support judge is the generation LLM), or for
   short numeric claims let the deterministic numeric check (the number occurs in an aligned cell / sentence of the cited
   chunk) supply the quote instead of the judge. Measure on the Phase 6 set before changing.
-- **Status:** open.
+- **Fix (Phase 6, `SUPPORT_NUMBER_FALLBACK=1`, `support.number_sentence`):** when the judge said "supported" but its
+  quote fails the relevance rule, a short numeric answer is accepted with the cited chunk's own sentence as the quote
+  if that sentence states every number of the answer exactly and shares a content word with the question. Only the
+  quote is replaced; the numeric checks still run. Dev set: D12 "1,399" withheld in all 3 runs of C -> answered with
+  the quote "... consisting of 1,399 rare entity queries ...". The 17 adversarial cases (incl. A15/A16 planted text)
+  keep their outcomes with every Phase 6 check on (`tests/test_answer_checks.py`).
+- **Status:** fixed.
+
+## F13 (continued) - Phase 6 fix: document-scope check
+- **Fix (`VERIFY_SCOPE=1`, `verification/answer_checks.py`, `trustqa/scope.py`):** names in the question that identify
+  documents (they occur in a document's title region - page-1 text before "Abstract" - or its file name, in some
+  but not all documents) define which documents the question is about. If every citation comes from other documents,
+  the answer is withheld with a reason ("the question is about Self-RAG, but the answer cites only
+  rag_lewis2020.pdf"); a mix caps the status at Partially Supported; a capitalised name that no document mentions at
+  all (e.g. "Infosys") withholds. Abstracts are deliberately not used: they name datasets and hardware ("Natural
+  Questions", "GPUs") that would wrongly scope questions (seen on T06 and D08 during development).
+- **Measured (dev set):** the allowed documents contain the labelled evidence for all 29 questions that name a paper
+  (0 wrongly scoped); D08 (RAG's V100 GPUs for Self-RAG) and D04 ("Llama 2-7B" from Self-RAG for RAG's generator)
+  are withheld; no correct answer was withheld by it. Two bugs were caught by the adversarial tests before use: table
+  cells ("Segment=Retail") were one token, and a file named helios_annual_2025.pdf did not count as mentioning Helios.
+
+## F15 - Lists split over chunks; short or misspelled questions refused without a reason
+- **What (user report, own literature-survey PDF, 3 pages):** "list the core technologies" / "What are the core
+  technologies?" returned Insufficient Evidence or only "the Transformer" - the survey lists six (Transformer, BERT,
+  T5, RAG, FlashAttention, PagedAttention/vLLM) in section "A. Core Technologies". Later "What are the core
+  technolgies?" (typo) was refused after 0.01 s with no explanation.
+- **Why:** (1) the 800-character chunker split the list; only the first chunk contained the heading, so the rest
+  ranked 21st of 36; (2) the abstention gate refused before generation because the best cosine was 0.24 < 0.30 -
+  short generic questions score low against long chunks, while an unrelated slide deck uploaded alongside raised the
+  top score and "opened" the gate; (3) the refusal carried no warning, so the UI could not say why.
+- **Fix (Phase 6):** section headings detected from font information are recorded on every chunk and shown to
+  retrieval and the generator (`SECTION_HEADINGS=1`, `processing/sections.py`); the gate is only a floor
+  (`ABSTAIN_MIN_SCORE=0.15`) - measured over 64 answerable and 6 unanswerable questions (dev set, the survey, two
+  unseen papers) the score does not separate the classes (answerable from 0.163, unanswerable 0.087-0.522), and every
+  unanswerable question that passes the gate is still refused by the model or by verification; a passage containing
+  every content word of the question passes the gate, tolerating one typo (`GATE_LEXICAL_PASS=1`); every
+  Insufficient Evidence result now states its reason (new warning code `no_evidence`), shown in the UI with tips.
+  The generator prompt `grounded-v2` asks for every item of a list.
+- **Status:** fixed; the 3B model still sometimes stops a list early (answer completeness is a model limit).
+

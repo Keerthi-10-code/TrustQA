@@ -218,13 +218,56 @@ Then run the app (use the run skill), upload the pilot PDFs, ask 3 questions inc
 Start the dataset in parallel from Phase 1 - labelling takes longest.
 - [ ] Dataset: 15 public PDFs (5 text, 5 scanned, 5 tables). Record source URL/licence in `data/README`.
 - [ ] 50 questions in `eval/questions.jsonl`: 10 direct, 10 multi-doc, 10 table/numeric, 10 insufficient-evidence, 5 conflicting, 5 scanned. Fields: id, question, reference_answer/expected_abstention, relevant doc+page, category. Have the labels double-checked (re-verify a week later or ask a friend for 10-question spot check).
-- [ ] Systems: A plain-text RAG, B OCR + plain RAG, C full TrustQA. Same questions, same LLM/embedding settings, configs logged.
-- [ ] Metrics (`eval/metrics.py`): EM / token-F1 (short), rubric or LLM-judge with manual spot-check (long); Recall@K, Precision@K, MRR; provenance correctness and support correctness reported **separately**; unsupported-claim rate; correct-abstention rate; conflict detection; numeric value/unit/period correctness; CER/WER on OCR where ground truth exists (jiwer); latency.
-- [ ] Ablations: remove one component at a time (no table-aware, no support check, no numeric check, no OCR) to show what each contributes.
-- [ ] Outputs: `eval/results/*.json|csv`, plots in `eval/plots/`, and an error analysis of 10-15 failure cases (what failed and why).
-- [ ] Run each system more than once if the LLM is non-deterministic (temperature 0, report variance if any).
+- [x] Systems: A plain-text RAG, B OCR + plain RAG, C full TrustQA. Same questions, same LLM/embedding settings, configs logged.
+- [x] Metrics (`eval/metrics.py`): EM / token-F1 (short), rubric or LLM-judge with manual spot-check (long); Recall@K, Precision@K, MRR; provenance correctness and support correctness reported **separately**; unsupported-claim rate; correct-abstention rate; conflict detection; numeric value/unit/period correctness; CER/WER on OCR where ground truth exists (jiwer); latency.
+- [x] Ablations: remove one component at a time (no table-aware, no support check, no numeric check, no OCR) to show what each contributes.
+- [x] Outputs: `eval/results/*.json|csv`, plots in `eval/plots/`, and an error analysis of 10-15 failure cases (what failed and why).
+- [x] Run each system more than once if the LLM is non-deterministic (temperature 0, report variance if any).
 
 Exit check: tables + plots reproducible by one command: `python -m eval.run_all`. **Tag `v1.0-eval`.**
+
+Phase 6 notes (harness done and run on the 38-question dev set; **the 15-PDF / 50-question set and its human
+double-check are still to be done by the team**, so `v1.0-eval` is not tagged). Harness: `eval/questions.py` (schema +
+validation + category counts), `eval/systems.py` (A, B, C, C-v0.4 = TrustQA as tagged v0.4-demo, and the ablations
+C-no_tables / -no_support / -no_numeric / -no_ocr; temperature 0; LLM outputs cached in SQLite by (prompt, model)
+hash), `eval/metrics.py` (unit-tested on hand-made examples), `eval/judge.py` (strict-JSON correctness judge),
+`eval/run_all.py` (one command; resumes after a kill; `--repeats`, `--fresh` for latency, `--rescore`,
+`--report-only`), `eval/report.py` (tables, plots), `eval/error_analysis.py` (worst cases per system + `spot_check.csv`
+for a human audit of the judge), `eval/realworld.py` (unseen documents), `eval/readme_results.py` (README table from
+the saved results only). Latency counts only questions whose model calls were not served from the cache.
+
+Phase 6 fixes (each behind a `.env` switch, measured before adoption, adversarial suite re-run with all of them on):
+section headings on chunks (`SECTION_HEADINGS`, user-reported F15), keyword gate pass tolerant of one typo and the
+cosine gate lowered to a floor of 0.15 (F15: over 64 answerable / 6 unanswerable questions the score does not separate
+the classes), a reason on every refusal (new warning code `no_evidence`), entity-scoped retrieval (F12), document-scope
+check (F13), quantity-answer rule (F10), numeric quote fallback (F14), citation repair (same page, neighbouring chunk),
+judge retry for skipped claims, list-aware prompt `grounded-v2` (C only; A/B keep `grounded-v1`). Rejected after
+measurement: asking the 3B judge for an extra `answers_question` verdict (flagged correct answers and changed its main
+verdicts; `JUDGE_ANSWERS_QUESTION=0`). Details and numbers per fix: `failures.md` F10, F12-F15.
+
+Results (dev set, 3 runs each, `eval/results/dev_questions/summary.md`; final = TrustQA with the fixes, v0.4 = as
+tagged after Phase 5): answer accuracy (LLM judge) A 19%, B 33%, v0.4 41%, final 44%; answered (answerable) 76 / 89 /
+70 / 75%; Verified answers correct - / - / 62 / 70%; shown answers wrong 74 / 62 / 42 / 41%; numeric value 24 / 44 /
+51 / 61%; evidence in top 5 56 / 75 / 78 / 83%; cites a labelled page 55 / 69 / 84 / 96%; unanswerable refused
+(n=2) 83 / 83 / 100 / 100%; mean latency 4.1 / 3.6 / 9.2 / 10.1 s. Ablations vs final: no table chunks -17 points
+accuracy, no OCR -17 (evidence in top 5 -22), no support check +4 accuracy but unanswerable refused 100 -> 50% and
+shown-wrong +5, no numeric check +0 accuracy, +3 shown-wrong. Variance: final accuracy 44% in all 3 runs, identical
+answer and status on 89% of questions. OCR on the scanned pilot paper: CER 5.4%, WER 10.5%. Conflict detection and
+unit/period correctness are n/a: the dev set has no conflicting questions and no unit/period labels. The judge has
+not been checked against a human yet (`spot_check.csv`).
+
+Real-world check (`python -m eval.realworld`, DPR and ColBERT papers never used in development, an image-only scan of
+DPR pages 1-6, and both mixed with the 4 pilot papers; 22 questions, answers read from the PDFs before running):
+B 12/22, v0.4 14/22, final 18/22; unanswerable refused 3/3 by all. B showed 7 wrong answers (e.g. the RAG paper's
+V100 GPUs for a Self-RAG question, "0.406" from the wrong table cell); final has 2 Verified answers that do not match
+the expected answer: R05 "19.3 percentage points" for "by how much does DPR outperform BM25" - a correct, Python-
+evaluated difference of the paper's NQ table (78.4 - 59.1), but not the paper's "9%-19%" summary - and O04 "3-5
+points" from the scanned copy, quoting "DPR generalizes well, with 3-5 points loss from the best performing
+fine-tuned model", which answers a different comparison (a true quote that does not answer the question: F10, the
+3B judge accepted it). Misses: R11 (two papers' embedding dimensions, evidence not retrieved, F12) and X03 (Self-RAG
+GPUs: its page says "4 Nvidia A100", never "GPUs", vocabulary mismatch). The user's own literature survey: "What are
+the core technolgies?" (typo), "list the core technologies" (all six items), "What is the research gap?" Verified,
+"What is the revenue of the company?" refused with its reason (in-process UI test with the real model).
 
 **Claude prompt - Phase 6**
 ```text
@@ -241,12 +284,20 @@ Report measured results only, with failure examples. Do not commit or tag.
 ```
 
 ## Phase 7 - Polish, docs, delivery (4-5 days)
-- [ ] README: setup (Windows + Colab), quickstart, architecture diagram, screenshots.
-- [ ] Colab notebook in `notebooks/` that runs the pipeline end to end.
-- [ ] Final report/slides: problem, related work (verify citations against originals), design, results, failures, limitations, future work.
-- [ ] 3-minute demo script and a recorded backup video.
-- [ ] Security pass: no keys in repo or history; `.env` ignored.
-- [ ] Clean `pytest` run on a fresh clone.
+- [x] README: setup (Windows + Colab), quickstart, architecture diagram (screenshots: to add from the demo run).
+- [x] Colab notebook in `notebooks/` that runs the pipeline end to end (built and syntax-checked; not yet run on Colab).
+- [ ] Final report/slides (outline in `docs/report_outline.md`; writing is the team's): problem, related work (verify citations against originals), design, results, failures, limitations, future work.
+- [x] 3-minute demo script (`docs/demo_script.md`); recorded backup video still to do.
+- [x] Security pass: no keys in repo or history; `.env` ignored.
+- [x] Clean `pytest` run on a fresh clone.
+
+Phase 7 notes: README rewritten (status meanings, mermaid architecture, Windows + Colab setup, app / CLI / Python
+quickstart, results generated from `eval/results/` by `python -m eval.readme_results`, configuration, evaluation,
+limitations). Security pass: no API keys or tokens in the working tree or the full git history (only a test dummy
+`gsk-test`), `.env` never committed and ignored, `.env.example` placeholders only. The Streamlit app was redesigned
+for clarity after user feedback: conversation layout, plain-language status meanings, a "why there is no answer"
+box with tips, check chips, numbered sources with quotes, starter questions from the documents' own section
+headings, document summary metrics; `TRUSTQA_PRELOAD` loads PDFs at start for demos and the end-to-end UI test.
 
 **Claude prompt - Phase 7**
 ```text
