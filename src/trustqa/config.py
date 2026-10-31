@@ -61,6 +61,16 @@ class Config:
     # verify=False regardless of their own settings.
     baseline_b: bool = False
 
+    # Verification (Phase 3). The verify_* switches exist for ablations (Phase 6); with one
+    # off, that check is skipped and the answer can no longer be Verified (except conflicts,
+    # which only ever lower the status).
+    verify_support: bool = True  # LLM judge + verbatim-quote check (FR-10)
+    verify_numeric: bool = True  # numbers / units / periods / calculations (FR-11)
+    verify_conflicts: bool = True  # cross-document conflict detection
+    abstain_min_score: float = 0.30  # skip generation below this top retrieval score
+    ocr_warn_confidence: float = 90.0  # cited OCR chunks below this get a warning
+    quote_min_similarity: float = 90.0  # fuzzy match for supporting quotes >= 20 chars
+
     # Paths
     raw_pdfs_dir: Path = PROJECT_ROOT / "data" / "raw_pdfs"
     processed_dir: Path = PROJECT_ROOT / "data" / "processed"
@@ -85,6 +95,11 @@ class Config:
                               f"{self.ocr_max_nonalnum_ratio}")
         if not 72 <= self.ocr_dpi <= 1200:
             raise ConfigError(f"ocr_dpi must be in [72, 1200], got {self.ocr_dpi}")
+        if not 0 <= self.ocr_warn_confidence <= 100:
+            raise ConfigError(f"ocr_warn_confidence must be in [0, 100], got {self.ocr_warn_confidence}")
+        if not 0 < self.quote_min_similarity <= 100:
+            raise ConfigError("quote_min_similarity must be in (0, 100], got "
+                              f"{self.quote_min_similarity}")
         if self.baseline_b:  # frozen dataclass: resolve the preset in place
             object.__setattr__(self, "flatten_tables", True)
             object.__setattr__(self, "verify", False)
@@ -174,6 +189,12 @@ def load_config(env_file: str | Path | None = None, **overrides: Any) -> Config:
         flatten_tables=_env_bool("FLATTEN_TABLES", d.flatten_tables),
         verify=_env_bool("VERIFY", d.verify),
         baseline_b=_env_bool("BASELINE_B", d.baseline_b),
+        verify_support=_env_bool("VERIFY_SUPPORT", d.verify_support),
+        verify_numeric=_env_bool("VERIFY_NUMERIC", d.verify_numeric),
+        verify_conflicts=_env_bool("VERIFY_CONFLICTS", d.verify_conflicts),
+        abstain_min_score=_env_float("ABSTAIN_MIN_SCORE", d.abstain_min_score),
+        ocr_warn_confidence=_env_float("OCR_WARN_CONFIDENCE", d.ocr_warn_confidence),
+        quote_min_similarity=_env_float("QUOTE_MIN_SIMILARITY", d.quote_min_similarity),
     )
     values.update(overrides)
     return Config(**values)

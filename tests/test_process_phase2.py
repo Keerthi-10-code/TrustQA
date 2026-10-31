@@ -254,7 +254,7 @@ def test_baseline_b_skips_verification(solar_pdf, cfg, fake_embedder, monkeypatc
     def boom(*a, **kw):
         raise AssertionError("verification must not run for baseline B")
 
-    monkeypatch.setattr(pipeline, "generate_and_verify", boom)
+    monkeypatch.setattr(pipeline, "run_verification", boom)
     llm_mod.set_llm(FakeLLM(_cite_first))
     r = pipeline.answer_question("installed capacity?", [solar_pdf], b)
     assert r.status is Status.PARTIALLY_SUPPORTED and r.citations

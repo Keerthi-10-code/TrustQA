@@ -6,6 +6,7 @@ from trustqa import llm as llm_mod
 from trustqa.generation import (
     ABSTENTION_ANSWER,
     SYSTEM_PROMPT,
+    answer_unverified,
     build_prompt,
     parse_generation,
     strip_invalid_markers,
@@ -48,17 +49,24 @@ def test_prompt_contains_passages_ids_and_rules():
 def test_grounded_answer_cites_pages_from_metadata():
     # The model claims page 99 and a different file name in prose and extra fields;
     # the citation must still come from chunk metadata.
-    fake = FakeLLM([json.dumps({
+    raw = json.dumps({
         "answer": "Revenue was Rs. 1,03,450.50 crore (annual.pdf, page 99) [DOC01_P3_C1].",
         "chunk_ids": ["DOC01_P3_C1"], "insufficient_evidence": False,
-        "page_number": 99, "document_name": "annual.pdf"})])
-    r = generate_and_verify(Q, PASSAGES, llm=fake)
-    assert r.status is Status.PARTIALLY_SUPPORTED  # baseline never claims Verified
-    assert len(r.citations) == 1
-    c = r.citations[0]
-    assert (c.document_id, c.document_name, c.page_number, c.chunk_ids) == (
-        "DOC01", "solar_report.pdf", 3, ["DOC01_P3_C1"])
-    assert r.warnings == []
+        "page_number": 99, "document_name": "annual.pdf"})
+    r = generate_and_verify(Q, PASSAGES, llm=FakeLLM([raw]))
+    base = answer_unverified(Q, PASSAGES, FakeLLM([raw]))
+    for res in (r, base):
+        assert res.status is Status.PARTIALLY_SUPPORTED  # one scripted reply: judge cannot run
+        assert len(res.citations) == 1
+        c = res.citations[0]
+        assert (c.document_id, c.document_name, c.page_number, c.chunk_ids) == (
+            "DOC01", "solar_report.pdf", 3, ["DOC01_P3_C1"])
+    # Phase 3 item 1: the verified path flags the false source claims in the prose;
+    # the frozen baseline (systems A/B) does not.
+    assert [w.code for w in r.warnings if w.code is WarningCode.PAGE_MISMATCH] == [
+        WarningCode.PAGE_MISMATCH] * 2
+    assert r.answer == "Revenue was Rs. 1,03,450.50 crore [DOC01_P3_C1]."
+    assert base.warnings == [] and "page 99" in base.answer
 
 
 def test_citations_grouped_by_page_in_cite_order():
@@ -125,7 +133,8 @@ def test_default_llm_honours_set_llm():
     fake = FakeLLM([reply(answer="1934 [DOC02_P2_C1].", chunk_ids=["DOC02_P2_C1"])])
     llm_mod.set_llm(fake)
     r = generate_and_verify("When was the dam completed?", PASSAGES)
-    assert r.citations[0].page_number == 2 and len(fake.calls) == 1
+    assert r.citations[0].page_number == 2
+    assert fake.calls[0]["system"] == SYSTEM_PROMPT  # generation went through set_llm()
 
 
 def test_strip_invalid_markers_leaves_other_brackets():

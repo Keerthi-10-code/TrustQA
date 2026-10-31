@@ -18,9 +18,10 @@ ID_IN_PROMPT = re.compile(r"^\[(DOC\d+_P\d+_C\d+)\]", re.M)
 def cfg(tmp_path):
     env = tmp_path / ".env"
     env.write_text("")
+    # abstain_min_score=0: FakeEmbedder's bag-of-words scores are not on MiniLM's scale.
     return load_config(env, chunk_size=200, chunk_overlap=40, top_k=3,
                        indexes_dir=tmp_path / "idx", raw_pdfs_dir=tmp_path,
-                       processed_dir=tmp_path / "processed")
+                       processed_dir=tmp_path / "processed", abstain_min_score=0.0)
 
 
 @pytest.fixture(autouse=True)
@@ -33,7 +34,7 @@ def _clear_caches():
 def cite_top_passage(prompt, system, json_mode):
     """Fake LLM that answers from, and cites, the first passage in the prompt."""
     top = ID_IN_PROMPT.findall(prompt)[0]
-    return json.dumps({"answer": f"From the passage [{top}].", "chunk_ids": [top],
+    return json.dumps({"answer": f"The passage states the answer [{top}].", "chunk_ids": [top],
                        "insufficient_evidence": False})
 
 
@@ -74,6 +75,16 @@ def test_abstention_flows_through(solar_pdf, cfg, fake_embedder):
                                          "insufficient_evidence": True})]))
     r = pipeline.answer_question("Who won the 1998 World Cup?", [solar_pdf], cfg)
     assert r.status is Status.INSUFFICIENT_EVIDENCE and not r.citations
+
+
+def test_low_retrieval_score_abstains_without_llm_call(solar_pdf, cfg, fake_embedder):
+    from dataclasses import replace
+
+    fake = FakeLLM([])
+    llm_mod.set_llm(fake)
+    r = pipeline.answer_question("Who won the 1998 World Cup?", [solar_pdf],
+                                 replace(cfg, abstain_min_score=0.99))
+    assert r.status is Status.INSUFFICIENT_EVIDENCE and not r.citations and fake.calls == []
 
 
 def test_text_less_pdf_gives_clear_error(tmp_path, cfg, fake_embedder):

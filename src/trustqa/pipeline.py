@@ -26,7 +26,7 @@ from trustqa.retrieval.index import (
 )
 from trustqa.retrieval.search import retrieve
 from trustqa.schemas import Result
-from trustqa.verification.verify import generate_and_verify
+from trustqa.verification.verify import VERIFIER_VERSION, run_verification
 
 logger = logging.getLogger("trustqa")
 
@@ -115,13 +115,15 @@ def run_record(config: Config) -> dict:
         "chunker_version": CHUNKER_VERSION,
         "index_format_version": INDEX_FORMAT_VERSION,
         "prompt_version": PROMPT_VERSION,
+        "verifier_version": VERIFIER_VERSION if config.verify else None,
     })
 
 
 def answer_question(
     question: str, uploaded_docs: Sequence[str | Path], config: Config | None = None
 ) -> Result:
-    """End to end: process_pdfs -> build_index -> retrieve -> generate_and_verify.
+    """End to end: process_pdfs -> build_index -> retrieve -> generate_and_verify
+    (via run_verification, so config's verification settings apply).
 
     Processed chunks and the index are cached per document set so repeated questions
     over the same uploads do not reprocess. Returns the final Result for the UI/CLI.
@@ -136,4 +138,4 @@ def answer_question(
     passages = retrieve(question, config.top_k, index)
     if not config.verify:
         return answer_unverified(question, passages, _llm_for(config))
-    return generate_and_verify(question, passages, llm=_llm_for(config))
+    return run_verification(question, passages, _llm_for(config), config)
