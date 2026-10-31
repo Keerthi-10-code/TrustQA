@@ -18,6 +18,7 @@ Source runs: Phase 2 exit check, 2026-10-31 (qwen2.5:3b, top_k=5, MiniLM + FAISS
 | F7 | Answers rarely restate unit / period | Minor | Phase 5 UI |
 | F8 | "Period" only tested on synthetic data | Minor | Phase 6 dataset |
 | F12 | Multi-doc questions: one document's evidence not retrieved | **Act on** | Phase 6 (decomposition with a stronger LLM) |
+| F14 | Correct answer withheld: judge's quote omits the claimed number | Minor | Stronger judge model / judge audit |
 | F13 | Verified answer about the wrong entity (RAG quote for a Self-RAG question) | **Act on** | Phase 6 judge audit |
 
 ---
@@ -194,4 +195,24 @@ None of these alter numbers; they affect which label a value is associated with.
 - **Fix idea:** in the Phase 6 judge audit, count Verified-but-wrong answers; candidates: a deterministic check that a
   named entity in the question (here "Self-RAG") occurs in the cited chunk or its document title, and a stronger
   judge model (F9).
+- **Status:** open.
+- **Phase 6 evidence (dev set, `eval/results/dev_questions/`):** D08 "What GPUs were used to train the Self-RAG
+  models?" (reference: 4 A100 80GB) was **Verified** in all 3 runs of system C with the RAG paper's sentence "distributing
+  training across 8, 32GB NVIDIA V100 GPUs" - the same entity mismatch, now with hybrid retrieval. System C has 7
+  Verified-but-incorrect answers on the 36 answerable dev questions (`error_analysis.md`, category
+  verified_but_incorrect): D08 (wrong entity, this entry), D01 / D03 / D10 / M06 / M07 (a true quote that does not
+  answer the question, F10) and D04 ("BART [32]" for "BART-large", judged partially correct).
+
+## F14 - Correct answer withheld: the judge's quote omits the claimed number
+- **What:** Phase 6 dev set, D12 "How many queries does Self-RAG's PopQA long-tail subset contain?" (reference 1,399).
+  System C generated "1,399" citing DOC04_P7_C1, whose text contains "consisting of 1,399 rare entity queries", and
+  withheld it in all 3 runs: "judge said supported, but its quote does not mention what the claim states".
+- **Why:** the quote-relevance rule (F11 fix) requires a supporting quote to contain one of the claim's digit sequences
+  or a new content word; qwen2.5:3b quoted a sentence of the right chunk that lacks the number. The rule did what it was
+  built to do (it cannot tell this from F11's planted-text case); the cost is a correct answer withheld.
+- **Repro:** `python -m eval.run_all --questions eval/dev_questions.jsonl --systems C` (row D12; withheld answer in
+  `runs/C__r0.json`).
+- **Fix idea:** a stronger judge (`--judge-*` is only for grading; the support judge is the generation LLM), or for
+  short numeric claims let the deterministic numeric check (the number occurs in an aligned cell / sentence of the cited
+  chunk) supply the quote instead of the judge. Measure on the Phase 6 set before changing.
 - **Status:** open.

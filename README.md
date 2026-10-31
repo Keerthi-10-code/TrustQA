@@ -62,3 +62,21 @@ question with baseline B or A side by side. Processing is cached per file (by co
 Unreadable, encrypted or empty PDFs and LLM problems (missing API key, Ollama not running)
 are reported in the UI.
 
+## Evaluation (Phase 6)
+```
+python -m eval.questions                                  # validate eval/questions.jsonl, category counts
+python -m eval.run_all                                    # everything: systems, judge, CER/WER, tables, plots
+python -m eval.run_all --questions eval/dev_questions.jsonl   # same on the 38-question dev set
+python -m eval.run_all --systems C --repeats 3            # variance across fresh LLM runs
+python -m eval.run_all --judge-provider groq --judge-model llama-3.3-70b-versatile   # stronger judge
+python -m eval.run_all --report-only                      # rebuild tables/plots from saved runs
+```
+Systems: A (plain-text RAG), B (OCR + plain RAG), C (TrustQA) and the ablations C-no_tables,
+C-no_support, C-no_numeric, C-no_ocr - identical LLM/embedding settings, temperature 0, run
+config logged per run. LLM outputs are cached by (prompt, model) hash in `eval/cache/`, so a
+re-run reproduces the tables and plots without model calls. Outputs: `eval/results/<stem>/`
+(`summary.md|json|csv`, `by_category.csv`, `per_question.csv`, `ocr_quality.json`,
+`error_analysis.md`, `spot_check.csv`) and `eval/plots/<stem>/`. Metric definitions:
+`eval/metrics.py`; question schema: `eval/questions.py`. Answer correctness comes from an LLM
+judge; fill `human_verdict` in `spot_check.csv` and re-run `--report-only` to measure its
+agreement with you.
