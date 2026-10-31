@@ -164,7 +164,7 @@ class Corpus:
         start = time.perf_counter()
         passages = retrieve_with_config(question.strip(), self.config.top_k, self.index,
                                         self.config, _llm_for(self.config))
-        result = answer_from_passages(question.strip(), passages, self.config)
+        result = answer_from_passages(question.strip(), passages, self.config, self.index)
         return Answer(result, passages, round(time.perf_counter() - start, 2), self.system)
 
 

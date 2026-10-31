@@ -29,7 +29,13 @@ from trustqa.config import Config, load_config
 from trustqa.generation import ABSTENTION_ANSWER, generate
 from trustqa.llm import LLM
 from trustqa.schemas import Citation, Result, RetrievedChunk, Status, Warning, WarningCode
+from trustqa.scope import DocumentScope
 from trustqa.verification.abstention import retrieval_gate
+from trustqa.verification.answer_checks import (
+    check_answer_type,
+    check_scope,
+    repair_neighbour_citations,
+)
 from trustqa.verification.claims import decompose_claims
 from trustqa.verification.conflicts import CONFLICT_PROMPT_VERSION, check_conflicts
 from trustqa.verification.numeric import CALC_PROMPT_VERSION, check_numbers, extract_numbers
@@ -71,21 +77,29 @@ def generate_and_verify(
 
 
 def run_verification(question: str, passages: Sequence[RetrievedChunk], llm: LLM,
-                     config: Config) -> Result:
+                     config: Config, scope: DocumentScope | None = None) -> Result:
     """generate_and_verify with explicit settings (thresholds and ablation switches)."""
     gate = retrieval_gate(passages, config.abstain_min_score, question,
                           config.gate_lexical_pass)
     if gate:
         logger.info("abstaining before generation: %s", gate)
-        return _abstain(question, [])
+        return _abstain(question, [Warning(
+            WarningCode.NO_EVIDENCE,
+            f"No passage in the documents matches this question closely enough ({gate}), so no "
+            "answer was generated. Check the spelling or use words that appear in the document.")])
 
-    out = generate(question, passages, llm)
+    out = generate(question, passages, llm, config.generation_prompt)
     warnings: list[Warning] = list(out.warnings)
     if out.abstained or not out.answer or not out.cited_ids:
         if out.answer and not out.abstained and not out.cited_ids:
             warnings.append(Warning(
                 WarningCode.UNSUPPORTED_CLAIM,
                 "the model's answer cited no retrieved passage, so it was withheld"))
+        else:
+            warnings.append(Warning(
+                WarningCode.NO_EVIDENCE,
+                f"The model read the {len(passages)} most relevant passages and found no answer "
+                "to this question in them."))
         return _abstain(question, warnings)
 
     # Item 1 - provenance
@@ -99,14 +113,44 @@ def run_verification(question: str, passages: Sequence[RetrievedChunk], llm: LLM
         return _abstain(question, warnings)
     chunks = dict(CitationRegistry.from_passages(passages).chunks)
 
+    # Answer about the question's documents (F13)
+    cap_reasons: list[str] = []
+    if config.verify_scope and scope is not None:
+        w, withhold, cap = check_scope(question, prov.citations, scope)
+        warnings.extend(w)
+        if withhold:
+            logger.info("withheld answer: %r", prov.answer)
+            return _abstain(question, warnings)
+        if cap:
+            cap_reasons.append("scope")
+
     # Item 2 - claims
     claims = decompose_claims(prov.answer, prov.accepted_ids)
+    if config.citation_repair:  # number cited from the neighbouring chunk on the same page
+        claims, repaired, added = repair_neighbour_citations(claims, prov.citations, chunks, passages)
+        if added:
+            logger.info("citation repair: added %s", added)
+            prov = replace(prov, citations=repaired)
+            chunks = dict(CitationRegistry.from_passages(passages).chunks)
 
     # Item 3 - support
     support = None
+    report: dict = {}
     if config.verify_support:
-        support, w = check_support(question, claims, chunks, llm, config.quote_min_similarity)
+        support, w = check_support(question, claims, chunks, llm, config.quote_min_similarity,
+                                   ask_answers_question=config.judge_answers_question,
+                                   number_fallback=config.support_number_fallback,
+                                   report=report, retry_missing=config.support_retry_missing)
         warnings.extend(w)
+    if config.verify_answers_question or config.judge_answers_question:  # F10
+        w = check_answer_type(question, prov.answer) if config.verify_answers_question else []
+        if report.get("answers_question") is False:
+            w.append(Warning(WarningCode.UNSUPPORTED_CLAIM,
+                             "the checker found that the answer may not give what the question "
+                             "asks for"))
+        if w:
+            warnings.extend(w)
+            cap_reasons.append("answer type")
 
     # Item 4 - numbers
     numeric = None
@@ -137,8 +181,16 @@ def run_verification(question: str, passages: Sequence[RetrievedChunk], llm: LLM
     logger.info("status %s: %s", decision.status.value, "; ".join(decision.reasons) or "all checks passed")
     if decision.status is Status.INSUFFICIENT_EVIDENCE:
         logger.info("withheld answer: %r", prov.answer)  # kept in the log for error analysis
+        warnings.insert(0, Warning(
+            WarningCode.NO_EVIDENCE,
+            "The model drafted an answer, but none of its statements could be confirmed in the "
+            "cited passages, so it is not shown (details below)."))
         return _abstain(question, warnings)
-    return Result(question=question, answer=prov.answer, status=decision.status,
+    status = decision.status
+    if status is Status.VERIFIED and cap_reasons:
+        logger.info("status capped at Partially Supported: %s", ", ".join(cap_reasons))
+        status = Status.PARTIALLY_SUPPORTED
+    return Result(question=question, answer=prov.answer, status=status,
                   citations=_with_quotes(prov.citations, support), warnings=warnings)
 
 

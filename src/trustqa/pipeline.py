@@ -26,6 +26,7 @@ from trustqa.retrieval.index import (
 )
 from trustqa.retrieval.search import retrieve_with_config
 from trustqa.schemas import Result, RetrievedChunk
+from trustqa.scope import scope_for
 from trustqa.verification.verify import VERIFIER_VERSION, run_verification
 
 logger = logging.getLogger("trustqa")
@@ -114,7 +115,7 @@ def run_record(config: Config) -> dict:
         "extractor_version": processing_signature(config),
         "chunker_version": CHUNKER_VERSION,
         "index_format_version": INDEX_FORMAT_VERSION,
-        "prompt_version": PROMPT_VERSION,
+        "prompt_version": config.generation_prompt if config.verify else PROMPT_VERSION,
         "verifier_version": VERIFIER_VERSION if config.verify else None,
     })
 
@@ -137,13 +138,15 @@ def answer_question(
     index = get_or_build_index(uploaded_docs, config)
     passages = retrieve_with_config(question, config.top_k, index, config,
                                     _llm_for(config))
-    return answer_from_passages(question, passages, config)
+    return answer_from_passages(question, passages, config, index)
 
 
 def answer_from_passages(question: str, passages: Sequence[RetrievedChunk],
-                         config: Config) -> Result:
+                         config: Config, index: SearchIndex | None = None) -> Result:
     """Generate (and, unless config.verify is off, verify) an answer from retrieved
-    passages. Shared by answer_question and the Streamlit demo (corpus.Corpus.ask)."""
+    passages. Shared by answer_question and the Streamlit demo (corpus.Corpus.ask).
+    `index` lets verification see which documents the question is about (verify_scope)."""
     if not config.verify:
         return answer_unverified(question, passages, _llm_for(config))
-    return run_verification(question, passages, _llm_for(config), config)
+    scope = scope_for(index) if (index is not None and config.verify_scope) else None
+    return run_verification(question, passages, _llm_for(config), config, scope)

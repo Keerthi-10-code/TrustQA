@@ -5,12 +5,14 @@ from __future__ import annotations
 import json
 
 from trustqa.generation import SYSTEM_PROMPT as GEN_SYSTEM
+from trustqa.generation import SYSTEM_PROMPT_V2 as GEN_SYSTEM_V2
 from trustqa.llm import FakeLLM, LLMError
 from trustqa.verification.conflicts import CONFLICT_SYSTEM_PROMPT
 from trustqa.verification.numeric import CALC_SYSTEM_PROMPT
-from trustqa.verification.support import SUPPORT_SYSTEM_PROMPT
+from trustqa.verification.support import SUPPORT_SYSTEM_PROMPT, SUPPORT_SYSTEM_PROMPT_V2
 
-STEPS = {GEN_SYSTEM: "generation", SUPPORT_SYSTEM_PROMPT: "support",
+STEPS = {GEN_SYSTEM: "generation", GEN_SYSTEM_V2: "generation", SUPPORT_SYSTEM_PROMPT: "support",
+         SUPPORT_SYSTEM_PROMPT_V2: "support",
          CALC_SYSTEM_PROMPT: "calc", CONFLICT_SYSTEM_PROMPT: "conflict"}
 
 

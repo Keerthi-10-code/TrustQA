@@ -69,6 +69,14 @@ For "supported" and "contradicted", set "chunk_id" to the passage ID and copy in
 Return a JSON object: {"verdicts": [{"claim_id": integer, "verdict": "supported" | "not_supported" | "contradicted", "chunk_id": string, "supporting_quote": string}]}"""
 
 
+SUPPORT_SYSTEM_PROMPT_V2 = SUPPORT_SYSTEM_PROMPT.replace(
+    'Return a JSON object: {"verdicts": [',
+    'Also judge the answer as a whole: set "answers_question" to false if the claims do not give '
+    'what the question asks for (for example they state related facts but not the asked value, '
+    'items or comparison), otherwise true.\n\n'
+    'Return a JSON object: {"answers_question": true | false, "verdicts": [')
+
+
 def is_fragment(text: str) -> bool:
     """A bare value or phrase ("0.347.", "Critique tokens") that only means something as the
     answer to the question, so the judge must check it against the question."""
@@ -157,8 +165,29 @@ def _parse_verdicts(raw: str) -> dict[int, dict]:
     return out
 
 
+def number_sentence(claim: Claim, chunks: dict[str, Chunk], question: str
+                    ) -> tuple[str, str] | None:
+    """(chunk_id, sentence) of a cited chunk stating every number of a short answer, in a
+    sentence that shares a content word with the question (F14 fallback quote)."""
+    nums = _number_tokens(claim.text)
+    if not nums or not is_fragment(claim.text):
+        return None
+    from trustqa.processing.chunking import split_sentences
+
+    q_stems = _stems(question)
+    for cid in claim.chunk_ids:
+        if cid not in chunks:
+            continue
+        for sent in split_sentences(chunks[cid].text):
+            toks = set(_number_tokens(sent))
+            if all(n in toks for n in nums) and (_stems(sent) & q_stems):
+                return cid, sent
+    return None
+
+
 def validate_verdict(claim: Claim, item: dict | None, chunks: dict[str, Chunk],
-                     min_similarity: float = 90.0, question: str = "") -> SupportResult:
+                     min_similarity: float = 90.0, question: str = "",
+                     number_fallback: bool = False) -> SupportResult:
     """Turn one raw judge verdict into a trusted SupportResult (plain Python)."""
     if item is None:
         return SupportResult(claim.claim_id, Verdict.NOT_SUPPORTED, reason="judge gave no verdict")
@@ -179,6 +208,11 @@ def validate_verdict(claim: Claim, item: dict | None, chunks: dict[str, Chunk],
     for cid in order:  # the judge may name the wrong passage; the quote decides
         if quote and quote_in_chunk(quote, chunks[cid].text, min_similarity):
             if verdict is Verdict.SUPPORTED and not quote_relevant(claim.text, quote, question):
+                found = number_sentence(claim, chunks, question) if number_fallback else None
+                if found is not None:  # judge right, quote wrong: use the chunk's own sentence
+                    return SupportResult(claim.claim_id, verdict, chunk_id=found[0],
+                                         quote=found[1], reason="quote replaced by the cited "
+                                         "sentence that states the number")
                 return SupportResult(claim.claim_id, Verdict.NOT_SUPPORTED, reason=(
                     "judge said supported, but its quote does not mention what the claim states"))
             return SupportResult(claim.claim_id, verdict, chunk_id=cid, quote=quote)
@@ -189,16 +223,25 @@ def validate_verdict(claim: Claim, item: dict | None, chunks: dict[str, Chunk],
 
 
 def check_support(question: str, claims: Sequence[Claim], chunks: dict[str, Chunk], llm: LLM,
-                  min_similarity: float = 90.0) -> tuple[dict[int, SupportResult], list[Warning]]:
-    """Judge every claim against its cited chunks with one LLM call."""
+                  min_similarity: float = 90.0, *, ask_answers_question: bool = False,
+                  number_fallback: bool = False, report: dict | None = None,
+                  retry_missing: bool = False
+                  ) -> tuple[dict[int, SupportResult], list[Warning]]:
+    """Judge every claim against its cited chunks with one LLM call. With
+    ask_answers_question the judge also says whether the answer gives what the question asks;
+    the value (True / False / None if absent) is stored in report["answers_question"]."""
     results: dict[int, SupportResult] = {}
     warnings: list[Warning] = []
     if not claims:
         return results, warnings
     try:
         raw = llm.complete(build_support_prompt(question, claims, chunks),
-                           system=SUPPORT_SYSTEM_PROMPT, json=True)
+                           system=SUPPORT_SYSTEM_PROMPT_V2 if ask_answers_question
+                           else SUPPORT_SYSTEM_PROMPT, json=True)
         verdicts = _parse_verdicts(raw)
+        if report is not None and ask_answers_question:
+            aq = json.loads(raw).get("answers_question")
+            report["answers_question"] = aq if isinstance(aq, bool) else None
     except (LLMError, json.JSONDecodeError) as e:
         for c in claims:
             results[c.claim_id] = SupportResult(c.claim_id, Verdict.UNVERIFIED, reason=str(e))
@@ -207,8 +250,22 @@ def check_support(question: str, claims: Sequence[Claim], chunks: dict[str, Chun
                                     f"support check could not run ({e}); claims are unverified"))
         return results, warnings
 
+    # A small judge often answers only the first few claims of a long answer: ask once more,
+    # for the material claims it skipped (same prompt format, original claim numbers).
+    missing = [c for c in claims if c.material and c.claim_id not in verdicts]
+    if retry_missing and missing:
+        try:
+            raw2 = llm.complete(build_support_prompt(question, missing, chunks),
+                                system=SUPPORT_SYSTEM_PROMPT, json=True)
+            for cid, item in _parse_verdicts(raw2).items():
+                if cid in {c.claim_id for c in missing}:
+                    verdicts.setdefault(cid, item)
+        except (LLMError, json.JSONDecodeError):
+            pass  # the skipped claims stay "judge gave no verdict"
+
     for c in claims:
-        res = validate_verdict(c, verdicts.get(c.claim_id), chunks, min_similarity, question)
+        res = validate_verdict(c, verdicts.get(c.claim_id), chunks, min_similarity, question,
+                               number_fallback)
         results[c.claim_id] = res
         if not c.material or res.verdict is Verdict.SUPPORTED:
             continue

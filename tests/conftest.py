@@ -91,7 +91,10 @@ def _retrieval_flags_off(monkeypatch):
     variables win over .env, so pin the Phase 4 flags to their defaults. Tests that want a
     flag pass it to load_config() or set it with monkeypatch.setenv."""
     for k, v in {"RETRIEVAL_HYBRID": "0", "RETRIEVAL_DIVERSIFY": "none", "RERANK": "0",
-                 "RETRIEVAL_DECOMPOSE": "0"}.items():
+                 "RETRIEVAL_DECOMPOSE": "0", "RETRIEVAL_ENTITY_SCOPE": "0",
+                 "SECTION_HEADINGS": "0", "GATE_LEXICAL_PASS": "0", "VERIFY_SCOPE": "0",
+                 "VERIFY_ANSWERS_QUESTION": "0", "JUDGE_ANSWERS_QUESTION": "0", "SUPPORT_NUMBER_FALLBACK": "0", "CITATION_REPAIR": "0", "SUPPORT_RETRY_MISSING": "0",
+                 "GENERATION_PROMPT": "grounded-v1"}.items():
         monkeypatch.setenv(k, v)
 
 

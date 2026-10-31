@@ -57,6 +57,15 @@ Return a JSON object with exactly these keys:
 {"answer": string, "chunk_ids": [string], "insufficient_evidence": boolean}"""
 
 
+SYSTEM_PROMPT_V2 = SYSTEM_PROMPT.replace(
+    "5. Keep the answer concise.",
+    "5. Answer exactly what the question asks, directly and concisely; do not answer with "
+    "sentences that are only related to it.\n"
+    "6. If the question asks for several things (a list, \"what are\", \"which ... are\", or a "
+    "comparison of two documents), give every item the passages state, each with its citation.")
+SYSTEM_PROMPTS = {"grounded-v1": SYSTEM_PROMPT, "grounded-v2": SYSTEM_PROMPT_V2}
+
+
 def format_passages(passages: Sequence[RetrievedChunk]) -> str:
     blocks = []
     for rc in passages:
@@ -170,11 +179,14 @@ def resolve_citations(cited_ids: Sequence[str], passages: Sequence[RetrievedChun
     return citations
 
 
-def generate(question: str, passages: Sequence[RetrievedChunk], llm: LLM) -> GenerationOutput:
-    """Ask the LLM for a grounded answer. With no passages, abstains without a call."""
+def generate(question: str, passages: Sequence[RetrievedChunk], llm: LLM,
+             prompt_version: str = PROMPT_VERSION) -> GenerationOutput:
+    """Ask the LLM for a grounded answer. With no passages, abstains without a call.
+    Baselines A/B always use the frozen grounded-v1 system prompt."""
     if not passages:
         return GenerationOutput(answer="", cited_ids=[], abstained=True)
-    raw = llm.complete(build_prompt(question, passages), system=SYSTEM_PROMPT, json=True)
+    raw = llm.complete(build_prompt(question, passages), system=SYSTEM_PROMPTS[prompt_version],
+                       json=True)
     return parse_generation(raw, passages)
 
 

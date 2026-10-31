@@ -124,6 +124,7 @@ def test_gate_lexical_pass_needs_every_content_word():
     assert content_terms(q) == {"core", "technologies"}
     assert retrieval_gate(low, 0.30, q) is not None                      # off by default
     assert retrieval_gate(low, 0.30, q, lexical_pass=True) is None        # section has both words
+    assert retrieval_gate(low, 0.30, "What are the core technolgies?", lexical_pass=True) is None  # typo
     assert retrieval_gate(low, 0.30, "What was the CEO salary in 2023?", lexical_pass=True)
     assert retrieval_gate(low, 0.30, "technologies?", lexical_pass=True)  # one word is not enough
     assert retrieval_gate([], 0.30, q, lexical_pass=True) == "no passages were retrieved"

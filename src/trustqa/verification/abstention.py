@@ -34,7 +34,8 @@ from trustqa.verification.support import SupportResult, Verdict
 _STOPWORDS = frozenset(
     "a an the of on in for to and or is are was were be been what which who whom whose how "
     "many much does do did list give name show describe explain tell me all about with by "
-    "from as at that this these those their its it there between than into".split())
+    "from as at that this these those their its it there between than into section say says "
+    "said summarize summarise summary document paper mention mentions".split())
 
 
 def content_terms(question: str) -> set[str]:
@@ -42,13 +43,29 @@ def content_terms(question: str) -> set[str]:
             if len(w) > 1 and w not in _STOPWORDS}
 
 
+def _term_in(term: str, words: set[str]) -> bool:
+    """Exact, or a one-letter typo / swap for words of 6+ letters ("technolgies")."""
+    if term in words:
+        return True
+    if len(term) < 6:
+        return False
+    from rapidfuzz.distance import DamerauLevenshtein
+
+    return any(abs(len(w) - len(term)) <= 1 and DamerauLevenshtein.distance(term, w) <= 1
+               for w in words)
+
+
 def lexical_cover(question: str, passages: Sequence[RetrievedChunk]) -> bool:
-    """True if some passage (text + section) contains all of >= 2 question content words."""
+    """True if some passage (text + section) contains all of >= 2 question content words
+    (tolerating one typo in long words)."""
     terms = content_terms(question)
     if len(terms) < 2:
         return False
-    return any(terms <= set(re.findall(r"[a-z0-9]+", index_text(p.chunk).lower()))
-               for p in passages)
+    for p in passages:
+        words = set(re.findall(r"[a-z0-9]+", index_text(p.chunk).lower()))
+        if all(_term_in(t, words) for t in terms):
+            return True
+    return False
 
 
 def retrieval_gate(passages: Sequence[RetrievedChunk], min_score: float,

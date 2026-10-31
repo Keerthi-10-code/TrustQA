@@ -49,6 +49,9 @@ class WarningCode(str, Enum):
     OCR_UNCERTAINTY = "ocr_uncertainty"
     NUMERIC_MISMATCH = "numeric_mismatch"
     CONFLICT = "conflict"
+    # Added in Phase 6 (deliberate contract change): why no answer was given - no passage
+    # matched, the model found nothing, or nothing it drafted could be verified.
+    NO_EVIDENCE = "no_evidence"
 
 
 class SchemaError(ValueError):

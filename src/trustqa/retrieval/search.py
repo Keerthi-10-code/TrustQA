@@ -15,6 +15,8 @@ the position in the final order.
 
 from __future__ import annotations
 
+import re
+
 from trustqa import llm as llm_mod
 from trustqa.config import Config, load_config
 from trustqa.retrieval import ranking
@@ -25,7 +27,7 @@ from trustqa.schemas import RetrievedChunk
 
 def upgrades_enabled(config: Config) -> bool:
     return (config.retrieval_hybrid or config.rerank or config.retrieval_decompose
-            or config.retrieval_diversify != "none")
+            or config.retrieval_diversify != "none" or config.retrieval_entity_scope)
 
 
 _llm_cache: dict[tuple, llm_mod.LLM] = {}
@@ -78,10 +80,55 @@ def retrieve_with_config(
     if config.retrieval_decompose:
         subqueries = decompose(question, llm or _default_llm(config), config.max_subqueries)
     positions, cosine = _ranked_positions(question, index, config, top_k, subqueries)
+    if config.retrieval_entity_scope:
+        positions = _entity_scoped(question, index, config, positions, cosine)
     return [
         RetrievedChunk(chunk=index.chunks[p], score=float(cosine[p]), rank=rank)
         for rank, p in enumerate(positions[:top_k], start=1)
     ]
+
+
+def _entity_scoped(question: str, index: SearchIndex, config: Config, positions: list[int],
+                   cosine) -> list[int]:
+    """Give each document-identifying name in the question (trustqa/scope.py) a share of the
+    first config.top_k slots, filled from its documents' best chunks (same dense / hybrid
+    fusion over the whole index, queried with the question minus the *other* documents'
+    names); the rest follow the normal order. Only the first top_k slots change, so a
+    deeper retrieval keeps the same top_k (the eval retrieves 10 and slices 5)."""
+    from trustqa.scope import scope_for
+
+    groups: dict[frozenset, list[str]] = {}
+    for name, docs in scope_for(index).identifying(question).items():
+        groups.setdefault(frozenset(docs), []).append(name)
+    if not groups:
+        return positions
+    k = min(config.top_k, len(positions))
+    n = len(index)
+    order_all, _ = _first_stage(question, index, config, n, cosine)
+    doc_of = [c.document_id for c in index.chunks]
+    lists = []
+    for g, names in groups.items():
+        others = [nm for g2, nms in groups.items() if g2 != g for nm in nms]
+        query = question
+        for nm in others:
+            query = re.sub(r"(?<!\w)" + re.escape(nm) + r"(?:'s|’s)?(?!\w)", " ", query)
+        query = re.sub(r"\s+", " ", query).strip()
+        order_g = _first_stage(query, index, config, n)[0] if others else order_all
+        lists.append([p for p in order_g if doc_of[p] in g])
+    per = max(1, -(-k // (len(groups) + 1)))  # ceil(k / (groups + 1))
+    picks: list[int] = []
+    for r in range(per):  # round robin, so every group gets its first pick
+        for lst in lists:
+            if r < len(lst) and lst[r] not in picks and len(picks) < k:
+                picks.append(lst[r])
+    for p in positions:
+        if len(picks) >= k:
+            break
+        if p not in picks:
+            picks.append(p)
+    rank = {p: i for i, p in enumerate(order_all)}
+    head = sorted(picks, key=lambda p: rank.get(p, n))
+    return head + [p for p in positions if p not in head]
 
 
 def _first_stage(query: str, index: SearchIndex, config: Config, n: int, cosine=None):

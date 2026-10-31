@@ -51,6 +51,9 @@ class Config:
     # merged by RRF with the original question's list (one extra LLM call per question).
     retrieval_decompose: bool = False
     max_subqueries: int = 3
+    # Each document-identifying name in the question (trustqa/scope.py) gets a share of the
+    # top-k from its documents, so a two-paper question retrieves both (failures.md F12).
+    retrieval_entity_scope: bool = False
 
     # Chunking (characters)
     chunk_size: int = 800
@@ -90,6 +93,25 @@ class Config:
     gate_lexical_pass: bool = False
     ocr_warn_confidence: float = 90.0  # cited OCR chunks below this get a warning
     quote_min_similarity: float = 90.0  # fuzzy match for supporting quotes >= 20 chars
+    # Answer-about-the-question checks (verification/answer_checks.py): citations from
+    # documents the question does not name are withheld / capped (F13); quantity questions
+    # need a number in the answer to be Verified (F10, deterministic).
+    verify_scope: bool = False
+    verify_answers_question: bool = False
+    # Also ask the support judge whether the answer gives what the question asks. Measured
+    # harmful with qwen2.5:3b (it flagged correct answers and the extra task changed its main
+    # verdicts, e.g. a correct "0.656" withheld); kept for a stronger judge model.
+    judge_answers_question: bool = False
+    # A short numeric answer whose number is in the cited chunk, in a sentence sharing words
+    # with the question, is supported even if the judge quoted a sentence without it (F14).
+    support_number_fallback: bool = False
+    # A number the model cites from the neighbouring chunk of the same page is checked against
+    # the chunk that states it (document and page unchanged; verification still decides).
+    citation_repair: bool = False
+    # Ask the support judge once more for material claims it skipped (long answers).
+    support_retry_missing: bool = False
+    # grounded-v1 (frozen, baselines) | grounded-v2 (lists every item, answers directly)
+    generation_prompt: str = "grounded-v1"
 
     # Paths
     raw_pdfs_dir: Path = PROJECT_ROOT / "data" / "raw_pdfs"
@@ -129,6 +151,9 @@ class Config:
             raise ConfigError(f"mmr_lambda must be in [0, 1], got {self.mmr_lambda}")
         if not 1 <= self.max_subqueries <= 5:
             raise ConfigError(f"max_subqueries must be in [1, 5], got {self.max_subqueries}")
+        if self.generation_prompt not in {"grounded-v1", "grounded-v2"}:
+            raise ConfigError("generation_prompt must be grounded-v1 or grounded-v2, got "
+                              f"{self.generation_prompt!r}")
         if self.baseline_b:  # frozen dataclass: resolve the preset in place
             object.__setattr__(self, "flatten_tables", True)
             object.__setattr__(self, "verify", False)
@@ -140,6 +165,8 @@ class Config:
             object.__setattr__(self, "rerank", False)
             object.__setattr__(self, "retrieval_decompose", False)
             object.__setattr__(self, "section_headings", False)
+            object.__setattr__(self, "retrieval_entity_scope", False)
+            object.__setattr__(self, "generation_prompt", "grounded-v1")
 
     @property
     def is_frozen_baseline(self) -> bool:
@@ -228,6 +255,7 @@ def load_config(env_file: str | Path | None = None, **overrides: Any) -> Config:
         reranker_model=_env_str("RERANKER_MODEL", d.reranker_model),
         retrieval_decompose=_env_bool("RETRIEVAL_DECOMPOSE", d.retrieval_decompose),
         max_subqueries=_env_int("MAX_SUBQUERIES", d.max_subqueries),
+        retrieval_entity_scope=_env_bool("RETRIEVAL_ENTITY_SCOPE", d.retrieval_entity_scope),
         chunk_size=_env_int("CHUNK_SIZE", d.chunk_size),
         chunk_overlap=_env_int("CHUNK_OVERLAP", d.chunk_overlap),
         tesseract_cmd=_env_str("TESSERACT_CMD", None),
@@ -249,6 +277,13 @@ def load_config(env_file: str | Path | None = None, **overrides: Any) -> Config:
         gate_lexical_pass=_env_bool("GATE_LEXICAL_PASS", d.gate_lexical_pass),
         ocr_warn_confidence=_env_float("OCR_WARN_CONFIDENCE", d.ocr_warn_confidence),
         quote_min_similarity=_env_float("QUOTE_MIN_SIMILARITY", d.quote_min_similarity),
+        verify_scope=_env_bool("VERIFY_SCOPE", d.verify_scope),
+        verify_answers_question=_env_bool("VERIFY_ANSWERS_QUESTION", d.verify_answers_question),
+        judge_answers_question=_env_bool("JUDGE_ANSWERS_QUESTION", d.judge_answers_question),
+        support_number_fallback=_env_bool("SUPPORT_NUMBER_FALLBACK", d.support_number_fallback),
+        citation_repair=_env_bool("CITATION_REPAIR", d.citation_repair),
+        support_retry_missing=_env_bool("SUPPORT_RETRY_MISSING", d.support_retry_missing),
+        generation_prompt=_env_str("GENERATION_PROMPT", d.generation_prompt),
     )
     values.update(overrides)
     return Config(**values)
