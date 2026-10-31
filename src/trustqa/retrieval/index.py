@@ -23,11 +23,20 @@ import faiss
 import numpy as np
 
 from trustqa.config import Config, load_config
-from trustqa.schemas import Chunk
+from trustqa.schemas import Chunk, ContentType
 
 logger = logging.getLogger("trustqa")
 
 INDEX_FORMAT_VERSION = 1
+
+
+def index_text(chunk: Chunk) -> str:
+    """Text that retrieval (embeddings, BM25, reranker) sees for a chunk: the chunk text,
+    prefixed by its section path for text chunks that carry one (config.section_headings).
+    Table chunks already carry caption/headers in their text."""
+    if chunk.section and chunk.content_type is ContentType.TEXT:
+        return f"{chunk.section}\n{chunk.text}"
+    return chunk.text
 
 
 class Embedder(Protocol):
@@ -98,7 +107,7 @@ class SearchIndex:
         if len(set(ids)) != len(ids):
             dupes = sorted({i for i in ids if ids.count(i) > 1})
             raise ValueError(f"duplicate chunk_ids: {dupes[:10]}")
-        vectors = _as_unit_rows(embedder.encode([c.text for c in chunks]))
+        vectors = _as_unit_rows(embedder.encode([index_text(c) for c in chunks]))
         if len(vectors) != len(chunks):
             raise ValueError("embedder returned a different number of vectors than chunks")
         index = faiss.IndexFlatIP(vectors.shape[1])

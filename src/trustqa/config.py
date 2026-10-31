@@ -71,6 +71,9 @@ class Config:
     # Tables (Phase 2) and verification switches. flatten_tables=True skips table
     # extraction: table content stays in the page text exactly as a plain-text RAG sees it.
     flatten_tables: bool = False
+    # Record each text chunk's section heading path (processing/sections.py) and show it to
+    # retrieval and generation next to the chunk text; the chunk text is unchanged.
+    section_headings: bool = False
     verify: bool = True
     # Preset for baseline system B (OCR + plain RAG): forces flatten_tables=True and
     # verify=False regardless of their own settings.
@@ -83,6 +86,8 @@ class Config:
     verify_numeric: bool = True  # numbers / units / periods / calculations (FR-11)
     verify_conflicts: bool = True  # cross-document conflict detection
     abstain_min_score: float = 0.30  # skip generation below this top retrieval score
+    # ...unless one passage contains every content word of the question (abstention.py)
+    gate_lexical_pass: bool = False
     ocr_warn_confidence: float = 90.0  # cited OCR chunks below this get a warning
     quote_min_similarity: float = 90.0  # fuzzy match for supporting quotes >= 20 chars
 
@@ -134,6 +139,7 @@ class Config:
             object.__setattr__(self, "retrieval_diversify", "none")
             object.__setattr__(self, "rerank", False)
             object.__setattr__(self, "retrieval_decompose", False)
+            object.__setattr__(self, "section_headings", False)
 
     @property
     def is_frozen_baseline(self) -> bool:
@@ -233,12 +239,14 @@ def load_config(env_file: str | Path | None = None, **overrides: Any) -> Config:
         ocr_psm=_env_int("OCR_PSM", d.ocr_psm),
         ocr_preprocess=_env_bool("OCR_PREPROCESS", d.ocr_preprocess),
         flatten_tables=_env_bool("FLATTEN_TABLES", d.flatten_tables),
+        section_headings=_env_bool("SECTION_HEADINGS", d.section_headings),
         verify=_env_bool("VERIFY", d.verify),
         baseline_b=_env_bool("BASELINE_B", d.baseline_b),
         verify_support=_env_bool("VERIFY_SUPPORT", d.verify_support),
         verify_numeric=_env_bool("VERIFY_NUMERIC", d.verify_numeric),
         verify_conflicts=_env_bool("VERIFY_CONFLICTS", d.verify_conflicts),
         abstain_min_score=_env_float("ABSTAIN_MIN_SCORE", d.abstain_min_score),
+        gate_lexical_pass=_env_bool("GATE_LEXICAL_PASS", d.gate_lexical_pass),
         ocr_warn_confidence=_env_float("OCR_WARN_CONFIDENCE", d.ocr_warn_confidence),
         quote_min_similarity=_env_float("QUOTE_MIN_SIMILARITY", d.quote_min_similarity),
     )

@@ -73,7 +73,8 @@ def generate_and_verify(
 def run_verification(question: str, passages: Sequence[RetrievedChunk], llm: LLM,
                      config: Config) -> Result:
     """generate_and_verify with explicit settings (thresholds and ablation switches)."""
-    gate = retrieval_gate(passages, config.abstain_min_score)
+    gate = retrieval_gate(passages, config.abstain_min_score, question,
+                          config.gate_lexical_pass)
     if gate:
         logger.info("abstaining before generation: %s", gate)
         return _abstain(question, [])

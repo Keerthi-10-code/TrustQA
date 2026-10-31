@@ -111,6 +111,9 @@ def chunk_text(text: str, chunk_size: int, chunk_overlap: int) -> list[str]:
     return chunks
 
 
+from trustqa.processing.sections import section_at  # noqa: E402
+
+
 def chunk_page(page: PageText, chunk_size: int, chunk_overlap: int) -> list[Chunk]:
     """Chunk one page. Empty pages produce no chunks.
 
@@ -124,12 +127,16 @@ def chunk_page(page: PageText, chunk_size: int, chunk_overlap: int) -> list[Chun
     search_from = 0
     for n, text in enumerate(chunk_text(page.text, chunk_size, chunk_overlap), start=1):
         conf = page.ocr_confidence
-        if page.ocr is not None:
+        section = None
+        if page.ocr is not None or page.section_marks:
             pos = page.text.find(text, search_from)
             if pos >= 0:
-                span_conf = page.ocr.span_confidence(pos, pos + len(text))
-                conf = span_conf if span_conf is not None else conf
+                if page.ocr is not None:
+                    span_conf = page.ocr.span_confidence(pos, pos + len(text))
+                    conf = span_conf if span_conf is not None else conf
                 search_from = pos + 1
+            if page.section_marks:
+                section = section_at(page.section_marks, max(pos, 0))
         chunks.append(Chunk(
             document_id=page.document_id,
             document_name=page.document_name,
@@ -139,6 +146,7 @@ def chunk_page(page: PageText, chunk_size: int, chunk_overlap: int) -> list[Chun
             content_type=ContentType.TEXT,
             extraction_method=ExtractionMethod(page.extraction_method),
             ocr_used=page.ocr_used,
+            section=section,
             ocr_confidence=conf if page.ocr_used else None,
         ))
     return chunks

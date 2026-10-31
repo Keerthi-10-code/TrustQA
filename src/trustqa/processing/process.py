@@ -41,6 +41,7 @@ from trustqa.processing.ocr import (
     ocr_page,
     tesseract_version,
 )
+from trustqa.processing.sections import SECTIONS_VERSION, find_headings, section_marks
 from trustqa.processing.tables import TABLES_VERSION, ExtractedTable, find_tables, table_chunks
 from trustqa.schemas import Chunk, ContentType, ExtractionMethod
 
@@ -60,6 +61,8 @@ def processing_signature(config: Config) -> str:
                      f"{config.ocr_lang},psm={config.ocr_psm},pre={int(config.ocr_preprocess)})")
     if not config.flatten_tables:
         parts.append(TABLES_VERSION)
+    if config.section_headings:
+        parts.append(SECTIONS_VERSION)
     return "+".join(parts)
 
 
@@ -179,6 +182,7 @@ def process_document(entry: DocumentEntry, config: Config,
         try:
             page_texts: list[PageText] = []
             page_tables: dict[int, list[ExtractedTable]] = {}
+            sec_stack: list = []  # open section headings, carried across pages
             for done, i in enumerate(selected):
                 if on_page is not None and done:
                     on_page(done, len(selected))
@@ -198,10 +202,14 @@ def process_document(entry: DocumentEntry, config: Config,
                     report.ocr_results[pn] = res
                     if _accept_ocr(q.alnum_chars, q.reason, res.text, config):
                         pr.method = "tesseract"
+                        marks = ()
+                        if config.section_headings:  # no font info: carry the open section
+                            marks, sec_stack = section_marks([], res.text, sec_stack)
                         page_texts.append(PageText(
                             entry.document_id, name, pn, res.text,
                             extraction_method=ExtractionMethod.TESSERACT, ocr_used=True,
-                            ocr_confidence=res.mean_confidence, ocr=res))
+                            ocr_confidence=res.mean_confidence, ocr=res,
+                            section_marks=marks))
                         continue
                     pr.ocr_rejected = True
                     report.warnings.append(f"page {pn}: OCR output not better than the text "
@@ -215,8 +223,12 @@ def process_document(entry: DocumentEntry, config: Config,
                         logger.warning("%s p%d: table extraction failed: %s", name, pn, e)
                 raw = page_text_excluding(doc[i], [t.bbox for t in tables]) if tables \
                     else raws[i]
-                page_texts.append(PageText(entry.document_id, name, pn,
-                                           normalize_text(raw, vocab)))
+                text = normalize_text(raw, vocab)
+                marks = ()
+                if config.section_headings:
+                    marks, sec_stack = section_marks(find_headings(doc[i]), text, sec_stack)
+                page_texts.append(PageText(entry.document_id, name, pn, text,
+                                           section_marks=marks))
                 page_tables[pn] = tables
                 pr.tables = len(tables)
         finally:

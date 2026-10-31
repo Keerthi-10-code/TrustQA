@@ -97,6 +97,9 @@ class PageText:
     ocr_used: bool = False
     ocr_confidence: float | None = None  # page mean, 0-100
     ocr: OcrPage | None = field(default=None, compare=False, repr=False)
+    # (offset in text, section path) where the section changes; empty unless
+    # config.section_headings (processing/sections.py)
+    section_marks: tuple[tuple[int, str], ...] = field(default=(), compare=False, repr=False)
 
 
 @dataclass(frozen=True)

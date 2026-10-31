@@ -25,6 +25,7 @@ from trustqa.llm import LLM, LLMError
 from trustqa.schemas import (
     Chunk,
     Citation,
+    ContentType,
     Result,
     RetrievedChunk,
     Status,
@@ -60,8 +61,10 @@ def format_passages(passages: Sequence[RetrievedChunk]) -> str:
     blocks = []
     for rc in passages:
         c = rc.chunk
-        blocks.append(f"[{c.chunk_id}] (source: {c.document_name}, page {c.page_number})\n"
-                      f"{c.text}")
+        where = f"source: {c.document_name}, page {c.page_number}"
+        if c.section and c.content_type is ContentType.TEXT:  # only with section_headings
+            where += f", section: {c.section}"
+        blocks.append(f"[{c.chunk_id}] ({where})\n{c.text}")
     return "\n\n".join(blocks)
 
 

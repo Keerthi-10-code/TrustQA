@@ -19,7 +19,7 @@ from trustqa import llm as llm_mod
 from trustqa.config import Config, load_config
 from trustqa.retrieval import ranking
 from trustqa.retrieval.decompose import decompose
-from trustqa.retrieval.index import SearchIndex, load_default_index
+from trustqa.retrieval.index import SearchIndex, index_text, load_default_index
 from trustqa.schemas import RetrievedChunk
 
 
@@ -111,7 +111,7 @@ def _ranked_positions(question: str, index: SearchIndex, config: Config, top_k: 
 
     if config.rerank:
         ce = ranking.rerank_scores(config.reranker_model, question,
-                                   [index.chunks[p].text for p in order])
+                                   [index_text(index.chunks[p]) for p in order])
         pairs = sorted(zip(order, ce), key=lambda t: -t[1])  # stable: ties keep prior order
         order = [p for p, _ in pairs]
         relevance = [float(s) for _, s in pairs]

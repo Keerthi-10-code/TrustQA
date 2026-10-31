@@ -17,6 +17,8 @@ from functools import lru_cache
 
 import numpy as np
 
+from trustqa.retrieval.index import index_text
+
 _TOKEN = re.compile(r"[a-z0-9]+(?:[.\-+@/_^][a-z0-9]+)*")
 _SPLIT = re.compile(r"[.\-+@/_^]")
 _NUMBER = re.compile(r"\d+(?:\.\d+)?")
@@ -58,7 +60,7 @@ def bm25_scores(index, query: str) -> np.ndarray:
     if bm25 is None:
         from rank_bm25 import BM25Okapi
 
-        bm25 = BM25Okapi([tokenize(c.text) or ["_empty_"] for c in index.chunks])
+        bm25 = BM25Okapi([tokenize(index_text(c)) or ["_empty_"] for c in index.chunks])
         _bm25_cache[index] = bm25
     q = tokenize(query)
     if not q:

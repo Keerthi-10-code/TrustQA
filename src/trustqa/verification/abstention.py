@@ -8,6 +8,12 @@ Two gates, both ending in INSUFFICIENT_EVIDENCE with no guessed answer:
    scored below 0.30. Scores alone do not separate the classes (an unanswerable question
    scored 0.685), so this gate is a cheap first filter, not the decision; re-calibrate it
    for another embedding model.
+   With `lexical_pass` (config.gate_lexical_pass) a question below the threshold still goes
+   ahead when one retrieved passage - its text plus section path - contains every content
+   word of the question (at least 2 words). Short generic questions such as "list the core
+   technologies" score low on cosine although the passage under the heading "Core
+   Technologies" is retrieved. Passing the gate only lets generation and verification run;
+   an answer is still shown only if its claims are supported.
 2. After verification: no material claim is supported by its cited evidence (every
    material claim was judged not_supported or contradicted, or failed its numeric check).
    Claims the judge could not assess ("unverified") do not trigger this gate.
@@ -15,20 +21,45 @@ Two gates, both ending in INSUFFICIENT_EVIDENCE with no guessed answer:
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 
+from trustqa.retrieval.index import index_text
 from trustqa.schemas import RetrievedChunk
 from trustqa.verification.claims import Claim
 from trustqa.verification.numeric import NumericResult
 from trustqa.verification.support import SupportResult, Verdict
 
 
-def retrieval_gate(passages: Sequence[RetrievedChunk], min_score: float) -> str | None:
+_STOPWORDS = frozenset(
+    "a an the of on in for to and or is are was were be been what which who whom whose how "
+    "many much does do did list give name show describe explain tell me all about with by "
+    "from as at that this these those their its it there between than into".split())
+
+
+def content_terms(question: str) -> set[str]:
+    return {w for w in re.findall(r"[a-z0-9]+", question.lower())
+            if len(w) > 1 and w not in _STOPWORDS}
+
+
+def lexical_cover(question: str, passages: Sequence[RetrievedChunk]) -> bool:
+    """True if some passage (text + section) contains all of >= 2 question content words."""
+    terms = content_terms(question)
+    if len(terms) < 2:
+        return False
+    return any(terms <= set(re.findall(r"[a-z0-9]+", index_text(p.chunk).lower()))
+               for p in passages)
+
+
+def retrieval_gate(passages: Sequence[RetrievedChunk], min_score: float,
+                   question: str | None = None, lexical_pass: bool = False) -> str | None:
     """Reason to abstain before generation, or None to go ahead."""
     if not passages:
         return "no passages were retrieved"
     best = max(p.score for p in passages)
     if best < min_score:
+        if lexical_pass and question and lexical_cover(question, passages):
+            return None
         return f"best retrieval score {best:.3f} is below the abstention threshold {min_score:g}"
     return None
 
